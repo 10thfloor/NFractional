@@ -1,0 +1,380 @@
+services:
+  nats:
+    image: nats:2.10
+    command: ["-c", "/etc/nats/nats.conf"]
+    ports:
+      - "4222:4222" # client
+      - "8222:8222" # monitoring
+    volumes:
+      - nats-data:/data
+      - ./infra/nats/nats.conf:/etc/nats/nats.conf:ro
+
+  nats-init:
+    image: natsio/nats-box:latest
+    depends_on:
+      nats:
+        condition: service_started
+    environment:
+      - NETWORK=emulator
+      - NATS_URL=nats://nats:4222
+    volumes:
+      - ./:/work
+    working_dir: /work
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      [
+        "until wget -qO- http://nats:8222/healthz | grep -q ok; do echo 'waiting for NATS...'; sleep 1; done; chmod +x infra/nats/jetstream-setup.sh && NETWORK=$${NETWORK} NATS_URL=$${NATS_URL} sh infra/nats/jetstream-setup.sh && echo 'JetStream initialized'",
+      ]
+    restart: "no"
+
+  # nats-smoke:
+  #   image: natsio/nats-box:latest
+  #   depends_on:
+  #     nats:
+  #       condition: service_started
+  #   environment:
+  #     - NETWORK=emulator
+  #     - NATS_URL=nats://nats:4222
+  #   volumes:
+  #     - ./:/work
+  #   working_dir: /work
+  #   entrypoint: ["/bin/sh", "-c"]
+  #   command:
+  #     [
+  #       "chmod +x infra/tests/nats-smoke.sh && NETWORK=$${NETWORK} NATS_URL=$${NATS_URL} sh infra/tests/nats-smoke.sh",
+  #     ]
+  #   restart: "no"
+
+  # normalizer-smoke:
+  #   image: natsio/nats-box:latest
+  #   depends_on:
+  #     nats:
+  #       condition: service_started
+  #     nats-init:
+  #       condition: service_completed_successfully
+  #     flow-normalizer:
+  #       condition: service_started
+  #   environment:
+  #     - NETWORK=emulator
+  #     - NATS_URL=nats://nats:4222
+  #   volumes:
+  #     - ./:/work
+  #   working_dir: /work
+  #   entrypoint: ["/bin/sh", "-c"]
+  #   command:
+  #     [
+  #       "chmod +x infra/tests/normalizer-smoke.sh && NETWORK=$${NETWORK} NATS_URL=$${NATS_URL} sh infra/tests/normalizer-smoke.sh",
+  #     ]
+  #   restart: "no"
+
+  # ingestor-smoke:
+  #   image: natsio/nats-box:latest
+  #   depends_on:
+  #     nats:
+  #       condition: service_started
+  #     nats-init:
+  #       condition: service_completed_successfully
+  #     flow-ingestor:
+  #       condition: service_started
+  #   environment:
+  #     - NETWORK=emulator
+  #     - NATS_URL=nats://nats:4222
+  #   volumes:
+  #     - ./:/work
+  #   working_dir: /work
+  #   entrypoint: ["/bin/sh", "-c"]
+  #   command:
+  #     [
+  #       "chmod +x infra/tests/ingestor-smoke.sh && NETWORK=$${NETWORK} NATS_URL=$${NATS_URL} sh infra/tests/ingestor-smoke.sh",
+  #     ]
+  #   restart: "no"
+
+  scylla:
+    image: scylladb/scylla:5.4
+    command: ["--smp", "1", "--memory", "1G", "--overprovisioned", "1"]
+    ports:
+      - "9042:9042" # CQL
+      - "9180:9180" # REST API (metrics)
+      - "9100:9100" # node exporter metrics
+    volumes:
+      - scylla-data:/var/lib/scylla
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'SHOW VERSION' >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  scylla-init:
+    image: scylladb/scylla:5.4
+    depends_on:
+      scylla:
+        condition: service_healthy
+    volumes:
+      - ./:/work
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      [
+        "cqlsh scylla 9042 -f /work/infra/scylla/001_core.cql && echo 'Scylla schema applied'",
+      ]
+    restart: "no"
+
+  # scylla-smoke:
+  #   image: scylladb/scylla:5.4
+  #   depends_on:
+  #     scylla:
+  #       condition: service_healthy
+  #     scylla-init:
+  #       condition: service_completed_successfully
+  #   volumes:
+  #     - ./:/work
+  #   working_dir: /work
+  #   entrypoint: ["/bin/sh", "-c"]
+  #   command:
+  #     ["chmod +x infra/tests/scylla-smoke.sh && sh infra/tests/scylla-smoke.sh"]
+  #   restart: "no"
+
+  # scylla-clear:
+  #   image: scylladb/scylla:5.4
+  #   depends_on:
+  #     scylla:
+  #       condition: service_healthy
+  #   environment:
+  #     - KEYSPACE=fractional
+  #   volumes:
+  #     - ./:/work
+  #   working_dir: /work
+  #   entrypoint: ["/bin/sh", "-c"]
+  #   command:
+  #     [
+  #       "chmod +x infra/tests/scylla-clear.sh && KEYSPACE=$${KEYSPACE} sh infra/tests/scylla-clear.sh",
+  #     ]
+  #   restart: "no"
+
+  flow-indexer:
+    build:
+      context: ./services/indexer
+    depends_on:
+      nats:
+        condition: service_started
+      nats-init:
+        condition: service_completed_successfully
+      scylla:
+        condition: service_healthy
+      scylla-init:
+        condition: service_completed_successfully
+    environment:
+      - NATS_URL=nats://nats:4222
+      - NETWORK=emulator
+      - CASSANDRA_CONTACT_POINTS=scylla
+      - CASSANDRA_KEYSPACE=fractional
+      - METRICS_PORT=9101
+    ports:
+      - "9101:9101"
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    environment:
+      - PORT=4000
+      - HOST=0.0.0.0
+      - CASSANDRA_CONTACT_POINTS=scylla
+      - CASSANDRA_KEYSPACE=fractional
+      - FLOW_ACCESS=http://host.docker.internal:8888
+      - FLOW_NETWORK=emulator
+      - NODE_ENV=development
+
+      - FRACTIONAL_PLATFORM_ADMIN_ADDRESS=${FRACTIONAL_PLATFORM_ADMIN_ADDRESS} #"flow-admin"
+      - FRACTIONAL_PLATFORM_ADMIN_KEY=${FRACTIONAL_PLATFORM_ADMIN_KEY} # flow/keys/flow-admin.pkey
+
+      # Optional: privileged minter account (for dev-only minting of ExampleNFT)
+      - FLOW_MINTER_ADDR=f8d6e0586b0a20c7 # flow/emulator-account
+      - FLOW_MINTER_KEY=${FLOW_MINTER_KEY} # flow/keys/emulator-account.pkey
+
+      - CADENCE_DIR=/app/flow/cadence
+    depends_on:
+      scylla:
+        condition: service_healthy
+      scylla-init:
+        condition: service_completed_successfully
+    ports:
+      - "4000:4000"
+    command: ["npm", "run", "start"]
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'node -e "fetch(''http://localhost:4000/graphiql'').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"',
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # api-smoke:
+  #   image: curlimages/curl:8.10.1
+  #   depends_on:
+  #     api:
+  #       condition: service_healthy
+  #   environment:
+  #     - API_URL=http://api:4000/graphql
+  #   volumes:
+  #     - ./:/work
+  #   working_dir: /work
+  #   entrypoint: ["/bin/sh", "-c"]
+  #   command:
+  #     ["chmod +x infra/tests/api-smoke.sh && sh infra/tests/api-smoke.sh"]
+  #   restart: "no"
+
+  flow-ingestor:
+    build:
+      context: ./services/ingestor
+    depends_on:
+      nats:
+        condition: service_started
+      nats-init:
+        condition: service_completed_successfully
+    environment:
+      - NETWORK=emulator
+      - NATS_URL=nats://nats:4222
+      - FLOW_ACCESS=http://host.docker.internal:8888
+      - ALLOW_SYNTHETIC=0
+      - START_HEIGHT=0
+      - BATCH=1000
+      - POLL_MS=500
+      - RESET_CHECKPOINT=1
+      - EVENT_TYPES=A.f8d6e0586b0a20c7.Fractional.VaultCreated,A.f8d6e0586b0a20c7.Fractional.SharesMinted,A.f8d6e0586b0a20c7.Fractional.TransferModeChanged,A.f8d6e0586b0a20c7.Fractional.Redeemed,A.f8d6e0586b0a20c7.Fractional.BuyoutProposed,A.f8d6e0586b0a20c7.Fractional.BuyoutVoted,A.f8d6e0586b0a20c7.Fractional.BuyoutFinalized,A.f8d6e0586b0a20c7.Fractional.BuyoutEscrowCreated,A.f8d6e0586b0a20c7.Fractional.BuyoutEscrowCancelled,A.f8d6e0586b0a20c7.Fractional.BuyoutEscrowClosed,A.f8d6e0586b0a20c7.Fractional.DistributionScheduled,A.f8d6e0586b0a20c7.Fractional.PayoutClaimed,A.f8d6e0586b0a20c7.Fractional.ListingCreated,A.f8d6e0586b0a20c7.Fractional.ListingFilled,A.f8d6e0586b0a20c7.Fractional.ListingCancelled,A.f8d6e0586b0a20c7.Fractional.ListingExpired,A.f8d6e0586b0a20c7.Fractional.Transfer,A.f8d6e0586b0a20c7.Fractional.UnderlyingDeposited,A.f8d6e0586b0a20c7.Fractional.UnderlyingWithdrawn,A.f8d6e0586b0a20c7.Fractional.UnderlyingBurned,A.f8d6e0586b0a20c7.Fractional.MaxSupplySet,A.f8d6e0586b0a20c7.Fractional.FeeParamsProposed,A.f8d6e0586b0a20c7.Fractional.FeeParamsActivated,A.f8d6e0586b0a20c7.Fractional.FeeParamsSet,A.f8d6e0586b0a20c7.Fractional.FeeAccrued,A.f8d6e0586b0a20c7.ConstantProductAMM.PoolCreated,A.f8d6e0586b0a20c7.ConstantProductAMM.LiquidityAdded,A.f8d6e0586b0a20c7.ConstantProductAMM.LiquidityRemoved,A.f8d6e0586b0a20c7.ConstantProductAMM.Swap,A.179b6b1cb6755e31.DistributionHandler.DistributionExecutionTriggered
+    restart: unless-stopped
+
+  flow-normalizer:
+    build:
+      context: ./services/normalizer
+    depends_on:
+      nats:
+        condition: service_started
+      nats-init:
+        condition: service_completed_successfully
+    environment:
+      - NETWORK=emulator
+      - NATS_URL=nats://nats:4222
+      - DURABLE=normalizer
+    restart: unless-stopped
+
+  flow-distributor:
+    build:
+      context: .
+      dockerfile: services/distributor/Dockerfile
+    depends_on:
+      nats:
+        condition: service_started
+      nats-init:
+        condition: service_completed_successfully
+      scylla:
+        condition: service_healthy
+      scylla-init:
+        condition: service_completed_successfully
+    environment:
+      - NATS_URL=nats://nats:4222
+      - NETWORK=emulator
+      - CASSANDRA_CONTACT_POINTS=scylla
+      - CASSANDRA_KEYSPACE=fractional
+      - FLOW_ACCESS=http://host.docker.internal:8888
+      - FLOW_CONTRACT_FRACTIONAL=f8d6e0586b0a20c7
+      - FLOW_CONTRACT_FT_CONNECTORS=f8d6e0586b0a20c7
+      - FRACTIONAL_PLATFORM_ADMIN_ADDRESS=${FRACTIONAL_PLATFORM_ADMIN_ADDRESS}
+      - FRACTIONAL_PLATFORM_ADMIN_KEY=${FRACTIONAL_PLATFORM_ADMIN_KEY}
+      - CADENCE_DIR=/app/flow/cadence
+      - DISTRIBUTOR_POLL_INTERVAL_MS=60000
+    restart: unless-stopped
+
+  # indexer-publish:
+  #   image: natsio/nats-box:latest
+  #   depends_on:
+  #     indexer:
+  #       condition: service_started
+  #   environment:
+  #     - NETWORK=emulator
+  #     - NATS_URL=nats://nats:4222
+  #     - VLT_ID=vlt-indexer-smoke
+  #   volumes:
+  #     - ./:/work
+  #   working_dir: /work
+  #   entrypoint: ["/bin/sh", "-c"]
+  #   command:
+  #     [
+  #       "chmod +x infra/tests/indexer-publish.sh && NETWORK=$${NETWORK} NATS_URL=$${NATS_URL} VLT_ID=$${VLT_ID} sh infra/tests/indexer-publish.sh",
+  #     ]
+  #   restart: "no"
+
+  # indexer-verify:
+  #   image: scylladb/scylla:5.4
+  #   depends_on:
+  #     indexer:
+  #       condition: service_started
+  #     indexer-publish:
+  #       condition: service_completed_successfully
+  #   environment:
+  #     - NETWORK=emulator
+  #     - VLT_ID=vlt-indexer-smoke
+  #   volumes:
+  #     - ./:/work
+  #   working_dir: /work
+  #   entrypoint: ["/bin/sh", "-c"]
+  #   command:
+  #     [
+  #       "chmod +x infra/tests/indexer-verify.sh && NETWORK=$${NETWORK} VLT_ID=$${VLT_ID} sh infra/tests/indexer-verify.sh",
+  #     ]
+  #   restart: "no"
+
+  prometheus:
+    image: prom/prometheus:v2.54.0
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command: ["--config.file=/etc/prometheus/prometheus.yml"]
+    ports:
+      - "19090:9090"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    depends_on:
+      prometheus:
+        condition: service_started
+    volumes:
+      - ./infra/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+
+  nats-surveyor:
+    image: natsio/nats-surveyor:latest
+    depends_on:
+      nats:
+        condition: service_started
+      nats-init:
+        condition: service_completed_successfully
+    command:
+      [
+        "-s",
+        "nats://nats:4222",
+        "-c",
+        "1",
+        "--user",
+        "sys",
+        "--password",
+        "sys",
+        "--jsz",
+        "all",
+        "--accounts",
+      ]
+    ports:
+      - "7777:7777"
+    restart: unless-stopped
+
+volumes:
+  nats-data: {}
+  scylla-data: {}

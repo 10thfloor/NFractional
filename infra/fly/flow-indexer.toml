@@ -1,0 +1,15 @@
+app = "flow-indexer"
+primary_region = "lax"
+
+[build]
+  context = "../.."
+  dockerfile = "../../services/indexer/Dockerfile"
+
+[env]
+  NATS_URL = "nats://flow-nats.internal:4222"
+  NETWORK = "testnet"
+  CASSANDRA_CONTACT_POINTS = "flow-scylla.internal"
+  CASSANDRA_KEYSPACE = "fractional"
+  METRICS_PORT = "9101"
+
+

@@ -1,0 +1,27 @@
+app = "flow-gql-api"
+primary_region = "lax"
+
+[build]
+context = "../.."
+dockerfile = "../../services/api/Dockerfile"
+
+[env]
+PORT = "4000"
+HOST = "0.0.0.0"
+CASSANDRA_CONTACT_POINTS = "flow-scylla.internal"
+CASSANDRA_KEYSPACE = "fractional"
+FLOW_ACCESS = "https://rest-testnet.onflow.org"
+FLOW_NETWORK = "testnet"
+NODE_ENV = "production"
+# Note: FLOW_MINTER_ADDR and FLOW_MINTER_KEY must be set as secrets for /dev/mint-example endpoint
+# Set via: flyctl secrets set FLOW_MINTER_ADDR=<addr> FLOW_MINTER_KEY=<key> -a flow-gql-api
+
+[[services]]
+internal_port = 4000
+protocol = "tcp"
+[[services.ports]]
+port = 80
+handlers = ["http"]
+[[services.ports]]
+port = 443
+handlers = ["tls", "http"]

@@ -1,0 +1,49 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors/IDEs
+.vscode/
+.idea/
+*.swp
+.history/
+
+# Node.js / TypeScript
+node_modules/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+
+# Builds / Artifacts
+dist/
+build/
+out/
+coverage/
+.nyc_output/
+
+# Next.js (if added later)
+.next/
+.turbo/
+
+# Env files
+.env
+.env.*
+!.env.example
+.envrc
+
+# Logs / PIDs
+logs/
+*.log
+*.pid
+*.seed
+
+# Docker
+.docker/
+
+
+# flow
+emulator-account.pkey
+imports

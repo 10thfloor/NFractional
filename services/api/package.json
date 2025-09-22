@@ -1,0 +1,32 @@
+{
+  "name": "fractional-graphql-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "predev": "node ../packages/cadence/scripts/generate.mjs",
+    "dev": "tsx src/server.ts",
+    "start": "node --enable-source-maps ./dist/server.js",
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@fastify/cors": "^8.5.0",
+    "@onflow/fcl": "^1.20.1",
+    "cassandra-driver": "4.6.4",
+    "cross-fetch": "^4.1.0",
+    "decimal.js": "^10.6.0",
+    "elliptic": "^6.6.1",
+    "fastify": "^4.29.1",
+    "mercurius": "13.3.3",
+    "prom-client": "15.1.3",
+    "sha3": "^2.1.4",
+    "zod": "3.23.8"
+  },
+  "devDependencies": {
+    "@onflow/types": "^1.4.2",
+    "@types/elliptic": "^6.4.18",
+    "@types/node": "^24.5.2",
+    "tsx": "4.16.2",
+    "typescript": "5.6.3"
+  }
+}

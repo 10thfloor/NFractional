@@ -1,0 +1,13 @@
+app = "flow-normalizer"
+primary_region = "lax"
+
+[build]
+  context = "../.."
+  dockerfile = "../../services/normalizer/Dockerfile"
+
+[env]
+  NETWORK = "testnet"
+  NATS_URL = "nats://flow-nats.internal:4222"
+  DURABLE = "normalizer"
+
+

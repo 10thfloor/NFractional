@@ -1,0 +1,14 @@
+app = "flow-nats"
+primary_region = "lax"
+
+[build]
+  context = "../.."
+  dockerfile = "../nats/Dockerfile.fly"
+
+[mounts]
+  source = "data"
+  destination = "/data"
+
+# Internal-only; clients connect over private networking
+
+

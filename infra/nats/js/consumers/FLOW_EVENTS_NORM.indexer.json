@@ -1,0 +1,12 @@
+{
+  "stream_name": "FLOW_EVENTS_NORM",
+  "config": {
+    "durable_name": "indexer",
+    "ack_policy": "explicit",
+    "deliver_policy": "all",
+    "replay_policy": "instant",
+    "filter_subject": "flow.events.norm.${NETWORK}.fractional.*",
+    "max_deliver": -1,
+    "max_ack_pending": 10000
+  }
+}

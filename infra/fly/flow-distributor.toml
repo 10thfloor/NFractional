@@ -1,0 +1,34 @@
+app = "flow-distributor"
+primary_region = "lax"
+
+[build]
+  context = "../.."
+  dockerfile = "../../services/distributor/Dockerfile"
+
+[env]
+  # Networking
+  NATS_URL = "nats://flow-nats.internal:4222"
+  NETWORK = "testnet"
+  CASSANDRA_CONTACT_POINTS = "flow-scylla.internal"
+  CASSANDRA_KEYSPACE = "fractional"
+
+  # Flow access node (Testnet)
+  FLOW_ACCESS = "https://rest-testnet.onflow.org"
+
+  # Contracts (set secrets for real addresses/keys via flyctl secrets set)
+  # These defaults are placeholders; distributor will fail if not set correctly.
+  FLOW_CONTRACT_FRACTIONAL = ""
+  FLOW_CONTRACT_FT_CONNECTORS = ""
+  FRACTIONAL_PLATFORM_ADMIN_ADDRESS = ""
+  FRACTIONAL_PLATFORM_ADMIN_KEY = ""
+
+  # Cadence directory inside container (copied by Dockerfile)
+  CADENCE_DIR = "/app/flow/cadence"
+
+  # Polling fallback (ms)
+  DISTRIBUTOR_POLL_INTERVAL_MS = "60000"
+
+# Internal-only service (no public ports)
+# This app connects to NATS and Scylla over Fly private networking.
+
+

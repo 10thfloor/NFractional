@@ -1,0 +1,14 @@
+FROM scylladb/scylla:5.4
+
+# Scylla needs to listen on Fly.io's IPv6 network
+# Use an entrypoint script to detect the machine's IPv6 address at runtime
+# Reduced memory to 512M to work within Fly.io VM constraints
+# Enable IPv6 DNS lookup as per FlyDatabases example
+COPY infra/scylla/scylla.yaml /etc/scylla/scylla.yaml
+COPY infra/scylla/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD []
+
+

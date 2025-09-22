@@ -1,0 +1,24 @@
+app = "flow-scylla"
+primary_region = "lax"
+
+[build]
+context = "../.."
+dockerfile = "../scylla/Dockerfile.fly"
+
+[mounts]
+source = "data"
+destination = "/var/lib/scylla"
+
+# Increase VM memory for Scylla (needs at least 2GB for stable operation)
+[vm]
+memory_mb = 2048
+
+[[services]]
+internal_port = 9042
+protocol = "tcp"
+# CQL port - internal only for Fly private networking
+
+[[services]]
+internal_port = 9180
+protocol = "tcp"
+# REST API/metrics port - internal only

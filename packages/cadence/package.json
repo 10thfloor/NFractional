@@ -1,0 +1,26 @@
+{
+  "name": "@flow-hackathon/cadence",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Generated Cadence scripts and transactions as importable strings",
+  "type": "module",
+  "main": "./index.cjs",
+  "module": "./index.mjs",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.mjs",
+      "require": "./index.cjs"
+    }
+  },
+  "files": [
+    "index.cjs",
+    "index.mjs",
+    "index.d.ts",
+    "scripts/generate.mjs"
+  ],
+  "scripts": {
+    "generate": "node ./scripts/generate.mjs"
+  }
+}

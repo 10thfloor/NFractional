@@ -1,0 +1,43 @@
+---
+
+description: Platform user personas and UX requirements for fractional NFT platform on Flow. Defines core roles (creator, investor, trader, admin, governance, liquidity, integrator), their goals, key actions, and UX needs to guide product and API design. Use these personas to ensure flows, validation, and feedback are tailored for each user type and platform maintainability.
+alwaysApply: true
+
+---
+
+**Here are the core personas/roles to design for:**
+
+Creator/Owner (Fractionalizer)
+Goals: Fractionalize their NFT, set terms (symbol, policy, max supply), mint/receive shares, list shares.
+Key actions: Setup custody, select NFT, configure vault, fractionalize, create listings.
+UX needs: Clear custody explanation, step-by-step wizard, simple validation, success receipts.
+
+Investor (Buyer/Holder)
+Goals: Discover vaults, assess value, buy shares, monitor holdings, claim distributions.
+Key actions: Browse vaults, view metadata and activity, buy via listings, track balances, claim payouts.
+UX needs: Trust signals (creator, events, supply), price/TVL, recent activity, easy purchase/claim flows.
+
+Trader (Secondary-market participant)
+Goals: List shares, cancel/fill orders, track open orders.
+Key actions: Create/cancel/fill listings, view order status/history.
+UX needs: Fast listing form, clear fees/quotes, order status feedback.
+
+Admin (Platform operator)
+Goals: Initialize platform resources, attest vaults, mint shares (policy-driven), manage settings, schedule distributions.
+Key actions: Setup admin, create vault metadata (attest), mint shares, set transfer mode, schedule distributions, finalize buyouts (interim).
+UX needs: Admin dashboard, guardrails, audit trails.
+
+Governance Participant (Future holder voting)
+Goals: Propose/vote on buyouts or policies.
+Key actions: Review proposals, cast votes, see results.
+UX needs: Voting power visibility, quorum/support thresholds, deadlines.
+
+Liquidity Provider (Future AMM/pools)
+Goals: Provide liquidity, earn fees, assess pool health.
+Key actions: Create pool, add/remove liquidity, swap.
+UX needs: Reserve/fee visuals, risk disclosures.
+
+Integrator/Analyst (API/Index consumer)
+Goals: Consume indexed data, build analytics/tools.
+Key actions: Query GraphQL, read metrics.
+UX needs: Stable API, schema docs, example queries.

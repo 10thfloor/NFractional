@@ -1,0 +1,19 @@
+app = "flow-ingestor"
+primary_region = "lax"
+
+[build]
+  context = "../.."
+  dockerfile = "../../services/ingestor/Dockerfile"
+
+[env]
+  NETWORK = "testnet"
+  NATS_URL = "nats://flow-nats.internal:4222"
+  FLOW_ACCESS = "https://rest-testnet.onflow.org"
+  ALLOW_SYNTHETIC = "0"
+  START_HEIGHT = "0"
+  BATCH = "1000"
+  POLL_MS = "1000"
+  RESET_CHECKPOINT = "0"
+  EVENT_TYPES = ""
+
+

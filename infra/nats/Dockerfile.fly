@@ -1,0 +1,5 @@
+FROM nats:2.10
+COPY infra/nats/nats.conf /etc/nats/nats.conf
+CMD ["-c", "/etc/nats/nats.conf"]
+
+

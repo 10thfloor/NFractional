@@ -1,0 +1,12 @@
+{
+  "name": "FLOW_EVENTS_NORM",
+  "subjects": ["flow.events.norm.*.>"],
+  "storage": "file",
+  "retention": "limits",
+  "num_replicas": 1,
+  "max_bytes": 536870912,
+  "max_msgs": -1,
+  "max_age": 0,
+  "discard": "old",
+  "duplicates": 120000000
+}

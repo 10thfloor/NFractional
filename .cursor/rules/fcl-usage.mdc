@@ -1,0 +1,7 @@
+---
+alwaysApply: true
+---
+
+# FCL Usage
+
+NEVER import @onflow/fcl in the /web project. We're using fcl from the @onflow/react-sdk package (useFlowClient hook)

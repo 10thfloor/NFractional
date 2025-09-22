@@ -1,0 +1,139 @@
+## Flow Hackathon — Project Rules for Cursor
+
+These rules tailor Cursor’s behavior for this repository. Favor straightforward, maintainable solutions with clean architecture and excellent developer experience.
+
+### Assistant behavior
+
+- Prefer clear, incremental edits with strong typing and explicit errors.
+- Use absolute paths in any tool or command suggestions (e.g., `/Users/mk/flow-hackathon/...`).
+- When citing existing code in messages, use code references with start:end:filepath. For new/proposed code, use standard fenced code blocks with a language tag. Never mix formats or add line numbers.
+- Keep messages concise; highlight critical details. Use `backticks` for files, directories, functions, and classes.
+
+### Tech stack
+
+- Runtime: Node.js 20+
+- Languages: TypeScript, Cadence, Bash
+- Package manager: pnpm
+- Frontend: Next.js (App Router) in `web/`
+- Services: `services/*` (API, ingestor, normalizer, indexer)
+- Messaging: NATS with JetStream
+- Database: ScyllaDB (CQL)
+- Observability: Prometheus, Grafana
+- Orchestration: Docker Compose
+
+### Repository conventions
+
+- Monorepo layout:
+  - Flow: `flow/` (Cadence, `flow.json`, keys)
+  - Infra: `infra/` (NATS, Scylla, Prometheus, Grafana, tests)
+  - Services: `services/{api,indexer,ingestor,normalizer}`
+  - Web: `web/`
+- Use pnpm local to each workspace. Do not introduce npm/yarn lock files.
+- Keep the existing Cadence filesystem layout and naming under `flow/cadence/transactions/*` (admin/user, domain folders).
+
+### TypeScript & code quality
+
+- Use strict typing. Avoid `any` and unsafe casts. Prefer discriminated unions and explicit return types for exported functions.
+- Prefer early returns and shallow control flow.
+- Handle errors with meaningful context; avoid bare catches.
+- Match existing formatting; rely on Prettier/ESLint. Do not reformat unrelated code in edits.
+
+### Flow/Cadence guidelines
+
+- Use `flow/flow.json` for import addresses. Do not hardcode addresses; refer to network configuration and `flow/imports/*` where applicable.
+- Keep contracts, scripts, and transactions organized under `flow/cadence/{contracts,scripts,transactions}`.
+- For new transactions/scripts, mirror existing folder structure: domain → role (`admin`/`user`).
+- Respect existing example contracts (`ExampleNFT.cdc`, `Fractional.cdc`). When extending, prefer composition over invasive changes.
+- Keys/addresses live in `flow/keys/`. Never commit new secrets; reference `.addr` when demonstrating usage.
+- Use Flow CLI commands via absolute paths and reference `flow.json`. Prefer non-interactive flags in scripts.
+
+### NATS & JetStream
+
+- Use the latest official NATS clients. Prefer JetStream for durable streams/consumers.
+- Streams and resources defined in `infra/nats/js`:
+  - Streams: `FLOW_EVENTS_RAW.json`, `FLOW_EVENTS_NORM.json`
+  - Consumer: `FLOW_EVENTS_NORM.indexer.json`
+  - KV Bucket: `FLOW_INDEX_CHKPT.json`
+- Do not invent stream names; read them from the JSON specs above. Derive subjects from stream configs.
+- Subject naming: If adding subjects, follow existing conventions and keep names UPPER_SNAKE for streams; use dot-separated subjects within stream scopes.
+- Ensure idempotent consumers and at-least-once processing. Use durable names and explicit acks with sensible `AckWait`.
+
+### Data & storage (Scylla)
+
+- Favor prepared statements and explicit schemas (see `infra/scylla/001_core.cql`).
+- Avoid `ALLOW FILTERING`. Design queries around partition keys.
+- Use ISO 8601 timestamps and UTC. Store numeric IDs as appropriate integer types.
+- Keep migrations additive and backward compatible.
+
+### Services
+
+- `services/api`: GraphQL/HTTP API entrypoint in `src/server.ts`. Add endpoints behind validation. Expose health/metrics endpoints consistently.
+- `services/indexer`: Pulls from normalized events; writes to Scylla. Keep batching, backpressure, and retry logic configurable via env.
+- `services/ingestor`: Ingest raw Flow events and publish to `FLOW_EVENTS_RAW`.
+- `services/normalizer`: Transform raw → normalized events; publish to `FLOW_EVENTS_NORM`.
+- Prefer clean architecture boundaries: domain logic isolated from transport (HTTP/NATS/DB). Keep adapters small.
+
+#### API (GraphQL) structure and conventions
+
+- Place GraphQL schema in `services/api/src/graphql/schema` and resolvers in `services/api/src/graphql/resolvers`.
+- Keep resolvers thin. Route all DB reads through `services/api/src/services/*` and all Flow writes via `services/api/src/tx/*`.
+- Centralize environment and FCL config in `services/api/src/lib/env.ts`. Do not inline FCL configuration or signing logic in resolvers; use `services/api/src/lib/flowAuth.ts`.
+- Document assumptions and local run instructions in `services/api/README.md`. Treat it as the source of truth for the API service.
+
+### Web (Next.js)
+
+- App Router under `web/src/app`. Keep server actions and data-fetching in `lib/` when possible.
+- Co-locate UI with route segments. Use typed GraphQL client in `web/src/lib/graphql.ts`.
+- Avoid heavy client components when server components suffice.
+
+### Observability
+
+- Emit Prometheus metrics from services (process, http, business metrics). Reuse default registry. Follow naming: `app_*` for custom series.
+- Use structured logs (JSON). Include request IDs and correlation IDs where available.
+- Keep Grafana/Prometheus configs in `infra/` source of truth.
+
+### Security & secrets
+
+- Never commit secrets. Use environment variables or mounted files.
+- Flow private keys should never be in code. Reference `flow/keys` only as paths in local scripts.
+- Validate and sanitize all external inputs (HTTP body, NATS payloads).
+
+### Commands & scripts
+
+- Use pnpm in workspaces:
+  - Build service: `cd /Users/mk/flow-hackathon/services/<name> && pnpm install --frozen-lockfile && pnpm build`
+  - Dev service: `cd /Users/mk/flow-hackathon/services/<name> && pnpm dev`
+  - Web dev: `cd /Users/mk/flow-hackathon/web && pnpm dev`
+- Use provided smoke tests under `infra/tests` to validate components.
+- Prefer non-interactive flags for any CLI.
+
+### Git & CI
+
+- Prefer Conventional Commits (e.g., `feat:`, `fix:`, `chore:`). Group related changes.
+- Keep edits minimal and scoped. Do not reformat files unrelated to the change.
+
+### Cursor formatting rules (critical)
+
+- When referencing existing code, use code references exactly in this format (no language tag):
+
+```12:14:app/components/Todo.tsx
+export const Todo = () => {
+  return <div>Todo</div>;
+};
+```
+
+- For new or proposed snippets, use standard fenced code blocks with language tags, e.g.:
+
+```typescript
+export function example(): string {
+  return "ok";
+}
+```
+
+- Do not include inline line numbers inside code blocks. Never indent the opening backticks.
+
+### Decision preferences
+
+- Optimize for developer experience and long-term maintainability.
+- Prefer small, composable modules over monoliths. Keep abstractions honest.
+- When in doubt, align with existing patterns in this repo and infra configs.

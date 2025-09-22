@@ -1,0 +1,11 @@
+{
+  "name": "KV_FLOW_INDEX_CHKPT",
+  "subjects": ["$KV.FLOW_INDEX_CHKPT.>"],
+  "storage": "file",
+  "retention": "limits",
+  "replicas": 1,
+  "max_msgs_per_subject": 1,
+  "discard": "new",
+  "allow_rollup_hdrs": true,
+  "allow_direct": true
+}

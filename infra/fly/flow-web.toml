@@ -1,0 +1,33 @@
+app = "flow-web"
+primary_region = "lax"
+
+[build]
+context = "../.."
+dockerfile = "../../web/Dockerfile"
+[build.args]
+NEXT_PUBLIC_FLOW_NETWORK = "testnet"
+NEXT_PUBLIC_ACCESS_NODE = "https://rest-testnet.onflow.org"
+NEXT_PUBLIC_DISCOVERY_WALLET = "https://fcl-discovery.onflow.org/testnet/authn"
+NEXT_PUBLIC_NETWORK = "testnet"
+NEXT_PUBLIC_API_URL = "https://flow-gql-api.fly.dev/graphql"
+NEXT_PUBLIC_API_BASE = "https://flow-gql-api.fly.dev"
+
+[env]
+PORT = "3000"
+# These are also set at runtime for consistency (though Next.js uses build-time values)
+NEXT_PUBLIC_FLOW_NETWORK = "testnet"
+NEXT_PUBLIC_ACCESS_NODE = "https://rest-testnet.onflow.org"
+NEXT_PUBLIC_DISCOVERY_WALLET = "https://fcl-discovery.onflow.org/testnet/authn"
+NEXT_PUBLIC_NETWORK = "testnet"
+NEXT_PUBLIC_API_URL = "https://flow-gql-api.fly.dev/graphql"
+NEXT_PUBLIC_API_BASE = "https://flow-gql-api.fly.dev"
+
+[[services]]
+internal_port = 3000
+protocol = "tcp"
+[[services.ports]]
+port = 80
+handlers = ["http"]
+[[services.ports]]
+port = 443
+handlers = ["tls", "http"]
