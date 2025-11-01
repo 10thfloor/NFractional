@@ -100,10 +100,11 @@ export async function createVaultAndMintDualTxConfig(
     "transactions/vault/user/submit-and-mint_dynamic.cdc"
   ] as string;
 
-  cadence = aliasVaultShareImport(cadence, ftContractName, ftAddress);
+  // First rewrite other imports, then alias VaultShareToken (order matters!)
   cadence = await (
     await import("@/lib/cadence")
   ).tempAddImports(cadence, API_BASE);
+  cadence = aliasVaultShareImport(cadence, ftContractName, ftAddress);
 
   return {
     cadence,

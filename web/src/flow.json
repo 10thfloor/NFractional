@@ -4,77 +4,77 @@
       "source": "cadence/contracts/FeeRouter.cdc",
       "aliases": {
         "emulator": "f8d6e0586b0a20c7",
-        "testnet": "0x237656746bc69765"
+        "testnet": "237656746bc69765"
       }
     },
     "ConstantProductAMM": {
       "source": "cadence/contracts/amm/ConstantProductAMM.cdc",
       "aliases": {
         "emulator": "f8d6e0586b0a20c7",
-        "testnet": "0x237656746bc69765"
+        "testnet": "237656746bc69765"
       }
     },
     "ConstantProductAMMSwapper": {
       "source": "cadence/contracts/amm/ConstantProductAMMSwapper.cdc",
       "aliases": {
         "emulator": "f8d6e0586b0a20c7",
-        "testnet": "0x237656746bc69765"
+        "testnet": "237656746bc69765"
       }
     },
     "ExampleNFT": {
       "source": "cadence/contracts/ExampleNFT.cdc",
       "aliases": {
         "emulator": "f8d6e0586b0a20c7",
-        "testnet": "0x237656746bc69765"
+        "testnet": "237656746bc69765"
       }
     },
     "FeeParamsActivatorHandler": {
       "source": "cadence/contracts/scheduler/FeeParamsActivatorHandler.cdc",
       "aliases": {
         "emulator": "179b6b1cb6755e31",
-        "testnet": "0x237656746bc69765"
+        "testnet": "237656746bc69765"
       }
     },
     "FeeParamsActivatorHandlerV2": {
       "source": "cadence/contracts/scheduler/FeeParamsActivatorHandlerV2.cdc",
       "aliases": {
         "emulator": "179b6b1cb6755e31",
-        "testnet": "0x237656746bc69765"
+        "testnet": "237656746bc69765"
       }
     },
     "FlowTransactionScheduler": {
       "source": "cadence/contracts/scheduler/FlowTransactionScheduler.cdc",
       "aliases": {
         "emulator": "179b6b1cb6755e31",
-        "testnet": "0x237656746bc69765"
+        "testnet": "237656746bc69765"
       }
     },
     "FlowTransactionSchedulerUtils": {
       "source": "cadence/contracts/scheduler/FlowTransactionSchedulerUtils.cdc",
       "aliases": {
         "emulator": "179b6b1cb6755e31",
-        "testnet": "0x237656746bc69765"
+        "testnet": "237656746bc69765"
       }
     },
     "FlowTransactionSchedulerUtilsV2": {
       "source": "cadence/contracts/scheduler/FlowTransactionSchedulerUtilsV2.cdc",
       "aliases": {
         "emulator": "179b6b1cb6755e31",
-        "testnet": "0x237656746bc69765"
+        "testnet": "237656746bc69765"
       }
     },
     "DistributionHandler": {
       "source": "cadence/contracts/scheduler/DistributionHandler.cdc",
       "aliases": {
         "emulator": "179b6b1cb6755e31",
-        "testnet": "0x237656746bc69765"
+        "testnet": "237656746bc69765"
       }
     },
     "Fractional": {
       "source": "cadence/contracts/Fractional.cdc",
       "aliases": {
         "emulator": "f8d6e0586b0a20c7",
-        "testnet": "0x237656746bc69765"
+        "testnet": "237656746bc69765"
       }
     },
     "VaultShareToken": {
@@ -225,7 +225,7 @@
       }
     },
     "testnet-admin": {
-      "address": "0x237656746bc69765",
+      "address": "237656746bc69765",
       "key": {
         "type": "file",
         "location": "keys/flow-admin.pkey"

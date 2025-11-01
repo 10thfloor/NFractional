@@ -22,38 +22,41 @@ export function aliasVaultShareImport(
 ): string {
   const addr = with0x(contractAddress);
 
-  // Match: import "VaultShareToken" or import 'VaultShareToken'
-  const patterns = [
-    /import\s+["']VaultShareToken["']/g,
-    /import\s+["']VaultShareToken["']\s*\n/g,
-    /import\s+["']VaultShareToken["']\s*$/gm,
-  ];
+  // Normalize any form of VaultShareToken import to the correct alias line
+  const aliasLine = `import ${contractName} as VaultShareToken from ${addr}`;
+
+  // Cases to handle:
+  // 1) import "VaultShareToken"
+  // 2) import 'VaultShareToken'
+  // 3) import VaultShareToken from 0x...
+  // 4) import <anything> as VaultShareToken from ...
+  // 5) import <anything> as VaultShareToken
 
   let result = code;
-  let replaced = false;
 
-  for (const pattern of patterns) {
-    if (pattern.test(result)) {
-      pattern.lastIndex = 0; // Reset regex state
-      result = result.replace(
-        pattern,
-        `import ${contractName} as VaultShareToken from ${addr}`
-      );
-      replaced = true;
-      break;
-    }
-  }
+  // Replace string import placeholders
+  result = result.replace(
+    /^[\t ]*import\s+["']VaultShareToken["'][\t ]*$/gm,
+    aliasLine
+  );
+  result = result.replace(/import\s+["']VaultShareToken["']/g, aliasLine);
 
-  if (!replaced) {
+  // Replace any existing import that aliases as VaultShareToken (left side arbitrary)
+  result = result.replace(
+    /^[\t ]*import\s+[^\n]*\bas\s+VaultShareToken\b[^\n]*$/gm,
+    aliasLine
+  );
+
+  // Replace any existing import of VaultShareToken without alias but with address
+  result = result.replace(
+    /^[\t ]*import\s+VaultShareToken\b[^\n]*$/gm,
+    aliasLine
+  );
+
+  // Final verification
+  if (!result.includes(aliasLine)) {
     throw new Error(
-      `VaultShareToken import not found in Cadence code. Cannot alias to ${contractName}.`
-    );
-  }
-
-  // Verify replacement happened
-  if (!result.includes(`import ${contractName} as VaultShareToken`)) {
-    throw new Error(
-      `Failed to alias VaultShareToken import to ${contractName} from ${addr}`
+      `Failed to alias VaultShareToken import to ${contractName} at ${addr}`
     );
   }
 

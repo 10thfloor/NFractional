@@ -10,6 +10,7 @@ import {
   usePreparedListing,
   type ListingFormState,
 } from "@/hooks/usePreparedListing";
+import { waitForTransactionSealed } from "@/lib/tx/utils";
 import Messages from "./components/Messages";
 import ListingForm from "./components/ListingForm";
 import ListingsList from "./components/ListingsList";
@@ -32,7 +33,7 @@ export default function ListingsPanel({
   const flowAddrs = useFlowAddresses();
 
   const { adminAuth, adminReady } = useAdminInfo();
-  const { listings, /* reload, */ error } = useListings(vaultId);
+  const { listings, reload, error } = useListings(vaultId);
 
   const userAuth = useMemo(
     () =>
@@ -63,16 +64,25 @@ export default function ListingsPanel({
   );
 
   const canSubmit = useMemo(() => {
+    // Check if form fields are valid immediately (without waiting for preparedTx)
+    const formValid =
+      Boolean(form.listingId?.trim()) &&
+      Boolean(form.priceAsset?.trim()) &&
+      Number(form.amount) > 0 &&
+      Number(form.priceAmount) > 0;
+
+    // Still require preparedTx to be ready for actual submission
     return (
       Boolean(preparedTx?.cadence) &&
       Boolean(adminReady && userReady) &&
-      Number(form.amount) > 0 &&
-      Number(form.priceAmount) > 0
+      formValid
     );
   }, [
     preparedTx?.cadence,
     adminReady,
     userReady,
+    form.listingId,
+    form.priceAsset,
     form.amount,
     form.priceAmount,
   ]);
@@ -98,14 +108,26 @@ export default function ListingsPanel({
             adminAuth={adminAuth}
             vaultSymbol={vaultSymbol}
             onSuccess={async (txId: string) => {
-              setSuccess(`Submitted tx ${txId}`);
-              setForm({
-                listingId: "",
-                priceAsset: "FLOW",
-                priceAmount: "",
-                amount: "",
-              });
-            }}
+              try {
+                setSuccess(`Transaction submitted: ${txId}. Waiting for confirmation...`);
+                // Wait for transaction to be sealed via websocket
+                await waitForTransactionSealed(fcl, txId);
+                // Reload listings to show the new listing
+                await reload();
+                setSuccess(`Listing created successfully! Transaction: ${txId}`);
+                setForm({
+                  listingId: "",
+                  priceAsset: "FLOW",
+                  priceAmount: "",
+                  amount: "",
+                });
+              } catch (e) {
+                setLocalError(
+                  `Transaction failed: ${(e as Error).message || String(e)}`
+                );
+                console.error("ListingForm onSuccess error", e);
+              }
+            },
             onError={(e: unknown) => {
               setLocalError((e as Error).message);
               console.error("ListingForm onError", e);
@@ -127,8 +149,19 @@ export default function ListingsPanel({
               disabled={!adminReady}
               isCreator={isCreator}
               onSuccess={async (txId: string) => {
-                setSuccess(`Submitted tx ${txId}`);
-              }}
+                try {
+                  // Wait for transaction to be sealed via websocket
+                  await waitForTransactionSealed(fcl, txId);
+                  // Reload listings to reflect the change
+                  await reload();
+                  setSuccess(`Transaction completed: ${txId}`);
+                } catch (e) {
+                  setLocalError(
+                    `Transaction failed: ${(e as Error).message || String(e)}`
+                  );
+                  console.error("ListingsList onSuccess error", e);
+                }
+              },
               onError={(e: unknown) => {
                 console.error("ListingsList onError", e);
                 setLocalError((e as Error).message);

@@ -61,7 +61,10 @@ function subscribeToTransactionStatus(
 ): () => void {
   const wsUrl = getWebSocketUrl();
   const ws = new WebSocket(wsUrl);
-  const subscriptionId = `tx-${txId.slice(0, 8)}-${Date.now()}`;
+  // Subscription ID must be <= 20 chars. Use first 8 chars of txId + 4-char timestamp suffix
+  const ts = Date.now().toString().slice(-4); // Last 4 digits of timestamp
+  const txPrefix = txId.slice(0, 8); // First 8 chars of txId
+  const subscriptionId = `${txPrefix}-${ts}`; // Max 13 chars
   let resolved = false;
 
   const cleanup = () => {
@@ -93,7 +96,7 @@ function subscribeToTransactionStatus(
           action: "subscribe",
           topic: "transaction_statuses",
           arguments: {
-            transaction_ids: [txId],
+            tx_id: txId,
           },
         })
       );

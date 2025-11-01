@@ -5,6 +5,7 @@ import type { TransactionButton as TransactionButtonType } from "@onflow/react-s
 import { Button } from "@/components/ui/button";
 import type React from "react";
 import { useCallback, useRef, useState, useEffect } from "react";
+import { useFlowClient, useFlowCurrentUser } from "@onflow/react-sdk";
 
 // Props combine shadcn Button props with the FCL TransactionButton props.
 // All visual styles are provided by Button; the inner TransactionButton is hidden
@@ -16,6 +17,10 @@ import { useCallback, useRef, useState, useEffect } from "react";
 //   from @/lib/tx/utils instead of polling (onceSealed)
 // - TransactionButton's internal status tracking may still use polling internally,
 //   but our direct transaction calls use websockets for real-time updates
+//
+// Account Refresh:
+// - Before each transaction, we refresh account info to ensure correct sequence number
+// - This prevents sequence number mismatch errors (Error Code 1007)
 
 type ButtonVariant = "default" | "secondary" | "destructive";
 
@@ -38,6 +43,8 @@ export default function TxActionButton({
   const hiddenRootRef = useRef<HTMLDivElement | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const fcl = useFlowClient();
+  const { user } = useFlowCurrentUser();
 
   // Monitor the hidden TransactionButton's status
   useEffect(() => {
@@ -95,9 +102,9 @@ export default function TxActionButton({
         ...mutation,
         onSuccess: async (txId: string) => {
           setIsLoading(true);
-          setStatusMessage(
-            "Transaction submitted, waiting for confirmation..."
-          );
+          // setStatusMessage(
+          //   "Transaction submitted, waiting for confirmation..."
+          // );
           try {
             await mutation.onSuccess?.(txId);
           } finally {
@@ -112,10 +119,23 @@ export default function TxActionButton({
       }
     : undefined;
 
-  const handleClick = useCallback(() => {
+  const handleClick = useCallback(async () => {
     if (disabled || isLoading) return;
     setIsLoading(true);
-    setStatusMessage("Preparing transaction...");
+
+    // Refresh account info before transaction to ensure correct sequence number
+    if (user?.addr && fcl) {
+      try {
+        const addrNoPrefix = user.addr.replace(/^0x/, "");
+        await (
+          fcl as { account: (address: string) => Promise<unknown> }
+        ).account(addrNoPrefix);
+      } catch (e) {
+        // If refresh fails, log but continue - FCL will still fetch on transaction build
+        console.warn("[TxActionButton] Failed to refresh account info:", e);
+      }
+    }
+
     // Try common clickable elements rendered by the inner TransactionButton
     const root = hiddenRootRef.current;
     const el = root?.querySelector("button, [role=button]") as
@@ -134,7 +154,7 @@ export default function TxActionButton({
       console.warn("TxActionButton: inner TransactionButton not found");
       setIsLoading(false);
     }
-  }, [disabled, isLoading]);
+  }, [disabled, isLoading, user?.addr, fcl]);
 
   const visibleLabel = isLoading
     ? statusMessage || children || txProps.label || "Processing..."

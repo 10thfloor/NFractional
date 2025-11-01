@@ -5,16 +5,42 @@ export type FlowAuthorizationFn = (
   account: unknown
 ) => Promise<unknown> | unknown;
 
+/**
+ * Refreshes account info to ensure we have the latest sequence number
+ * This is important to avoid sequence number mismatch errors
+ */
+async function refreshAccountInfo(
+  fcl: { account: (address: string) => Promise<unknown> },
+  address: string
+): Promise<void> {
+  try {
+    // Fetch fresh account info - this will update FCL's internal cache
+    const addrNoPrefix = address.replace(/^0x/, "");
+    await fcl.account(addrNoPrefix);
+  } catch (e) {
+    // If refresh fails, log but don't throw - FCL will still fetch on transaction build
+    console.warn("[flow] Failed to refresh account info:", e);
+  }
+}
+
 export function makeAdminAuth(admin: {
   addr: string;
   keyId: number;
+  fcl?: { account: (address: string) => Promise<unknown> }; // Optional FCL instance for account refresh
 }): FlowAuthorizationFn {
-  const adminAuth = (acct: unknown) => {
+  const adminAuth = async (acct: unknown) => {
     if (!admin) throw new Error("Admin signer not ready");
     const API = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:4000";
     const addrNoPrefix = String(admin.addr || "0x0").replace(/^0x/, "");
     const keyId = Number(admin.keyId || 0);
 
+    // Always fetch fresh account info to ensure correct sequence number
+    // This ensures we get the latest sequence number, not a cached one
+    if (admin.fcl) {
+      await refreshAccountInfo(admin.fcl, admin.addr);
+    }
+
+    // FCL will fetch account info if sequenceNum is null or undefined
     return {
       ...(acct as {
         tempId: string;
@@ -26,6 +52,7 @@ export function makeAdminAuth(admin: {
       // FCL expects addr sans 0x on the account object
       addr: addrNoPrefix,
       keyId,
+      // Setting sequenceNum to null tells FCL to fetch the latest account info
       sequenceNum: null,
       signingFunction: async (signable: unknown) => {
         const res = await fetch(`${API}/flow/admin-sign`, {

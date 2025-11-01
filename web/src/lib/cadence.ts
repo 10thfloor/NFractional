@@ -22,6 +22,10 @@ export function normalizeFlowAddress(input: string): string {
 /**
  * Replace any placeholder or existing VaultShareToken import with a concrete alias.
  * Ensures there is exactly one import using contractName and normalized address.
+ *
+ * IMPORTANT: The format should be: import {contractName} as VaultShareToken from {address}
+ * where contractName is the vault-specific token name (e.g., VaultShareToken_EX42)
+ * and VaultShareToken is the alias used in the Cadence code.
  */
 export function aliasVaultShareImport(
   cadence: string,
@@ -36,38 +40,69 @@ export function aliasVaultShareImport(
   }
   const addr = normalizeFlowAddress(address);
 
-  // Prepare target line
+  // Prepare target line: import {contractName} as VaultShareToken from {address}
   const aliasLine = `import ${contractName} as VaultShareToken from ${addr}`;
 
-  let updated = cadence;
-  // Replace placeholder forms: import "VaultShareToken" | 'VaultShareToken'
-  updated = updated.replace(/import\s+["']VaultShareToken["']/g, aliasLine);
-
-  // Replace any existing line that imports VaultShareToken in another way
-  updated = updated.replace(
-    /^\s*import\s+.*\bVaultShareToken\b.*$/gm,
-    aliasLine
-  );
-
-  // Deduplicate if multiple identical import lines ended up present
-  const lines = updated.split("\n");
-  const seen = new Set<string>();
+  // Split into lines for more precise processing
+  const lines = cadence.split("\n");
   const resultLines: string[] = [];
-  for (const line of lines) {
-    const isAlias = line.trim() === aliasLine;
-    if (isAlias) {
-      if (seen.has(aliasLine)) continue;
-      seen.add(aliasLine);
+  let aliasInserted = false;
+  let insertIndex = -1;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    // Check if this is already the correct import
+    if (trimmed === aliasLine) {
+      if (!aliasInserted) {
+        resultLines.push(line);
+        aliasInserted = true;
+      }
+      // Skip duplicate correct imports
+      continue;
     }
+
+    // Check if this is a VaultShareToken import that needs to be replaced
+    const isPlaceholder = /^\s*import\s+["']VaultShareToken["']/.test(line);
+    const isWrongImport = /^\s*import\s+.*\bVaultShareToken\b/.test(line);
+
+    if (isPlaceholder || isWrongImport) {
+      // Replace with correct import, but only once
+      if (!aliasInserted) {
+        resultLines.push(aliasLine);
+        aliasInserted = true;
+      }
+      // Skip the incorrect import line
+      continue;
+    }
+
+    // Track where to insert the import if we haven't found it yet
+    if (insertIndex === -1 && /^\s*import\s+/.test(line)) {
+      insertIndex = resultLines.length;
+    }
+
+    // Keep all other lines
     resultLines.push(line);
   }
+
+  // If we didn't find and replace any VaultShareToken import, insert it at the right location
+  if (!aliasInserted) {
+    if (insertIndex >= 0) {
+      resultLines.splice(insertIndex, 0, aliasLine);
+    } else {
+      // Insert at the beginning if no imports found
+      resultLines.unshift(aliasLine);
+    }
+  }
+
   return resultLines.join("\n");
 }
 
 /** Ensure a valid Cadence UFix64 literal string: use Decimal-based fixed 8 rounding down. */
 export function ensureUFix64String(value: string): string {
   // Lazy import to avoid circular deps during build
-   
+
   const {
     formatUFix64,
   }: { formatUFix64: (v: unknown) => string } = require("./num");
@@ -158,7 +193,7 @@ export async function tempAddImports(
     updated = updated.replace(anyLineRegex, aliasLine);
     // Replace existing address with normalized
     const withFromRegex = new RegExp(
-      `^\\s*import\\s+${name}\\s+from\\s+.*$`,
+      `^\\s*import\\s+${name}(?!\\s+as)\\s+from\\s+.*$`,
       "gm"
     );
     updated = updated.replace(withFromRegex, aliasLine);
