@@ -18,6 +18,8 @@ ENV NODE_ENV=production
 COPY services/ingestor/package.json services/ingestor/package-lock.json* services/ingestor/pnpm-lock.yaml* services/ingestor/yarn.lock* ./
 RUN npm ci --omit=dev || (echo "No lockfile, falling back to npm install --omit=dev" && npm install --omit=dev)
 COPY --from=builder /app/dist ./dist
+# Copy event type files for file-based configuration
+COPY infra/ingestor/events-emulator.txt infra/ingestor/events-testnet.txt /app/events/
 CMD ["npm", "run", "start"]
 
 

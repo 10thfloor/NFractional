@@ -2,18 +2,17 @@ app = "flow-ingestor"
 primary_region = "lax"
 
 [build]
-  context = "../.."
-  dockerfile = "../../services/ingestor/Dockerfile"
+context = "../.."
+dockerfile = "../../services/ingestor/Dockerfile"
 
 [env]
-  NETWORK = "testnet"
-  NATS_URL = "nats://flow-nats.internal:4222"
-  FLOW_ACCESS = "https://rest-testnet.onflow.org"
-  ALLOW_SYNTHETIC = "0"
-  START_HEIGHT = "0"
-  BATCH = "1000"
-  POLL_MS = "1000"
-  RESET_CHECKPOINT = "0"
-  EVENT_TYPES = ""
-
-
+NETWORK = "testnet"
+NATS_URL = "nats://flow-nats.internal:4222"
+FLOW_ACCESS = "https://rest-testnet.onflow.org"
+ALLOW_SYNTHETIC = "0"
+START_HEIGHT = "287981108"
+BATCH = "100"
+POLL_MS = "1000"
+RESET_CHECKPOINT = "1"
+# Load event types from file (file-based config)
+EVENT_TYPES_FILE = "/app/events/events-testnet.txt"

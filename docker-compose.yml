@@ -230,6 +230,10 @@ services:
   flow-ingestor:
     build:
       context: ./services/ingestor
+    volumes:
+      # Mount event type files for file-based configuration
+      - ./infra/ingestor/events-emulator.txt:/app/events/events-emulator.txt:ro
+      - ./infra/ingestor/events-testnet.txt:/app/events/events-testnet.txt:ro
     depends_on:
       nats:
         condition: service_started
@@ -244,7 +248,8 @@ services:
       - BATCH=1000
       - POLL_MS=500
       - RESET_CHECKPOINT=1
-      - EVENT_TYPES=A.f8d6e0586b0a20c7.Fractional.VaultCreated,A.f8d6e0586b0a20c7.Fractional.SharesMinted,A.f8d6e0586b0a20c7.Fractional.TransferModeChanged,A.f8d6e0586b0a20c7.Fractional.Redeemed,A.f8d6e0586b0a20c7.Fractional.BuyoutProposed,A.f8d6e0586b0a20c7.Fractional.BuyoutVoted,A.f8d6e0586b0a20c7.Fractional.BuyoutFinalized,A.f8d6e0586b0a20c7.Fractional.BuyoutEscrowCreated,A.f8d6e0586b0a20c7.Fractional.BuyoutEscrowCancelled,A.f8d6e0586b0a20c7.Fractional.BuyoutEscrowClosed,A.f8d6e0586b0a20c7.Fractional.DistributionScheduled,A.f8d6e0586b0a20c7.Fractional.PayoutClaimed,A.f8d6e0586b0a20c7.Fractional.ListingCreated,A.f8d6e0586b0a20c7.Fractional.ListingFilled,A.f8d6e0586b0a20c7.Fractional.ListingCancelled,A.f8d6e0586b0a20c7.Fractional.ListingExpired,A.f8d6e0586b0a20c7.Fractional.Transfer,A.f8d6e0586b0a20c7.Fractional.UnderlyingDeposited,A.f8d6e0586b0a20c7.Fractional.UnderlyingWithdrawn,A.f8d6e0586b0a20c7.Fractional.UnderlyingBurned,A.f8d6e0586b0a20c7.Fractional.MaxSupplySet,A.f8d6e0586b0a20c7.Fractional.FeeParamsProposed,A.f8d6e0586b0a20c7.Fractional.FeeParamsActivated,A.f8d6e0586b0a20c7.Fractional.FeeParamsSet,A.f8d6e0586b0a20c7.Fractional.FeeAccrued,A.f8d6e0586b0a20c7.ConstantProductAMM.PoolCreated,A.f8d6e0586b0a20c7.ConstantProductAMM.LiquidityAdded,A.f8d6e0586b0a20c7.ConstantProductAMM.LiquidityRemoved,A.f8d6e0586b0a20c7.ConstantProductAMM.Swap,A.179b6b1cb6755e31.DistributionHandler.DistributionExecutionTriggered
+      # Load event types from file (file-based config)
+      - EVENT_TYPES_FILE=/app/events/events-emulator.txt
     restart: unless-stopped
 
   flow-normalizer:

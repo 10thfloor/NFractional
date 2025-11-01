@@ -1,0 +1,40 @@
+# Flow Event Types for Emulator
+# Format: A.{address}.{ContractName}.{EventName}
+# One event type per line, comments start with #
+
+# Fractional contract events (emulator address: f8d6e0586b0a20c7)
+A.f8d6e0586b0a20c7.Fractional.VaultCreated
+A.f8d6e0586b0a20c7.Fractional.SharesMinted
+A.f8d6e0586b0a20c7.Fractional.TransferModeChanged
+A.f8d6e0586b0a20c7.Fractional.Redeemed
+A.f8d6e0586b0a20c7.Fractional.BuyoutProposed
+A.f8d6e0586b0a20c7.Fractional.BuyoutVoted
+A.f8d6e0586b0a20c7.Fractional.BuyoutFinalized
+A.f8d6e0586b0a20c7.Fractional.BuyoutEscrowCreated
+A.f8d6e0586b0a20c7.Fractional.BuyoutEscrowCancelled
+A.f8d6e0586b0a20c7.Fractional.BuyoutEscrowClosed
+A.f8d6e0586b0a20c7.Fractional.DistributionScheduled
+A.f8d6e0586b0a20c7.Fractional.PayoutClaimed
+A.f8d6e0586b0a20c7.Fractional.ListingCreated
+A.f8d6e0586b0a20c7.Fractional.ListingFilled
+A.f8d6e0586b0a20c7.Fractional.ListingCancelled
+A.f8d6e0586b0a20c7.Fractional.ListingExpired
+A.f8d6e0586b0a20c7.Fractional.Transfer
+A.f8d6e0586b0a20c7.Fractional.UnderlyingDeposited
+A.f8d6e0586b0a20c7.Fractional.UnderlyingWithdrawn
+A.f8d6e0586b0a20c7.Fractional.UnderlyingBurned
+A.f8d6e0586b0a20c7.Fractional.MaxSupplySet
+A.f8d6e0586b0a20c7.Fractional.FeeParamsProposed
+A.f8d6e0586b0a20c7.Fractional.FeeParamsActivated
+A.f8d6e0586b0a20c7.Fractional.FeeParamsSet
+A.f8d6e0586b0a20c7.Fractional.FeeAccrued
+
+# ConstantProductAMM contract events (emulator address: f8d6e0586b0a20c7)
+A.f8d6e0586b0a20c7.ConstantProductAMM.PoolCreated
+A.f8d6e0586b0a20c7.ConstantProductAMM.LiquidityAdded
+A.f8d6e0586b0a20c7.ConstantProductAMM.LiquidityRemoved
+A.f8d6e0586b0a20c7.ConstantProductAMM.Swap
+
+# DistributionHandler contract events (emulator flow-admin address: 179b6b1cb6755e31)
+A.179b6b1cb6755e31.DistributionHandler.DistributionExecutionTriggered
+

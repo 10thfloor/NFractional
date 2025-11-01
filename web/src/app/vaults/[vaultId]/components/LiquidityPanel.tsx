@@ -17,6 +17,7 @@ import { getVault } from "@/lib/api/vault";
 import { poolInfoScript } from "@/lib/api/pools";
 import { useFlowAddresses } from "@/app/FlowAddressesContext";
 import { getWalletBalancesScriptAliased } from "@/lib/tx/scripts";
+import { waitForTransactionSealed } from "@/lib/tx/utils";
 import { useVaultCustodyStatus } from "@/hooks/useVaultCustodyStatus";
 import { tempAddImports } from "@/lib/cadence";
 import { getVaultMaxSupply, getVaultTotalSupply } from "@/lib/api/vault";
@@ -290,7 +291,7 @@ export default function LiquidityPanel({
     setSeedSubmitting(true);
     try {
       const identifier = String(poolCapPath).replace(/^\/public\//, "");
-      await fcl.mutate({
+      const txId = await fcl.mutate({
         cadence: await addLiquidityTxAliased(vaultId),
         args: (arg: FclArgFn, t: FclType) => {
           const types = t as {
@@ -309,9 +310,14 @@ export default function LiquidityPanel({
         },
         limit: 9999,
       });
+
+      // Wait for transaction to be sealed via websocket
+      await waitForTransactionSealed(fcl, txId);
+
       // Clear inputs locally; parent will refresh reserves on next query tick
       setSeedShareAmount("");
       setSeedFlowAmount("");
+      refreshBalances();
     } catch (e) {
       setSeedErr((e as Error).message);
     } finally {

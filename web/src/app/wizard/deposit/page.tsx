@@ -15,6 +15,7 @@ import PrismaticBurst from "@/components/PrismaticBurst";
 import { useAdminInfo } from "@/hooks/useAdminInfo";
 import type { FlowAuthorizationFn } from "@/lib/flow";
 import { createVaultAndMintDualTxConfig } from "@/lib/tx/vaults";
+import { waitForTransactionSealed } from "@/lib/tx/utils";
 import NotLoggedIn from "@/components/ui/NotLoggedIn";
 
 type PublicCol = NftCollectionPublic;
@@ -90,7 +91,6 @@ export default function DepositWizardPage() {
 
   type FclLike = {
     mutate: (cfg: Record<string, unknown>) => Promise<string>;
-    tx: (id: string) => { onceSealed: () => Promise<void> };
   };
   const f = fcl as unknown as FclLike;
 
@@ -778,7 +778,7 @@ export default function DepositWizardPage() {
                         txCfg as unknown as Record<string, unknown>
                       );
 
-                      await f.tx(txId).onceSealed();
+                      await waitForTransactionSealed(fcl, txId);
 
                       setStatus(`Vault created and shares minted: ${txId}`);
 

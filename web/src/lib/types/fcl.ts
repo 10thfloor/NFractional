@@ -20,6 +20,10 @@ export type FclMutateInput = {
 export type FclClient = {
   query: (input: FclQueryInput) => Promise<unknown>;
   mutate: (input: FclMutateInput) => Promise<string>;
+  /**
+   * @deprecated Use websocket-based waitForTransactionSealed from @/lib/tx/utils instead
+   * This polling-based method is less efficient than websocket subscriptions
+   */
   tx: (id: string) => { onceSealed: () => Promise<void> };
   currentUser: () => { authorization: unknown };
 };

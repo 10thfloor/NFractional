@@ -1,4 +1,6 @@
 import { files as cadenceFiles } from "@flow-hackathon/cadence";
+import { waitForTransactionSealed } from "./utils";
+
 export const publishCustodyCapTx =
   cadenceFiles["transactions/custody/user/PublishCustodyCap.cdc"];
 export const depositTx = cadenceFiles["transactions/custody/user/deposit.cdc"];
@@ -31,6 +33,9 @@ export async function depositToCustody(
         `depositToCustody failed: ${String((e as Error).message || e)}`
       );
     });
-  //   await fcl.tx(txId as string).onceSealed();
+  
+  // Wait for transaction to be sealed via websocket
+  await waitForTransactionSealed(fcl, txId as string);
+  
   return txId as string;
 }

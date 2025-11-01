@@ -11,13 +11,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useFlowClient, useFlowCurrentUser } from "@onflow/react-sdk";
 import { useAdminInfo } from "@/hooks/useAdminInfo";
 import type { FlowAuthorizationFn } from "@/lib/flow";
 import { createVaultFromNFTDualTxConfig } from "@/lib/tx/vaults";
 import TxActionButton from "@/app/components/TxActionButton";
 import NotLoggedIn from "@/components/ui/NotLoggedIn";
+import { usePollVault } from "@/hooks/usePollVault";
 
 export default function Step3Page() {
   const params = useSearchParams();
@@ -44,6 +45,26 @@ export default function Step3Page() {
 
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [txId, setTxId] = useState<string | null>(null);
+  const router = useRouter();
+
+  // Poll for vault after transaction succeeds
+  const { vault: polledVault, isLoading: isPolling, attempts } = usePollVault(
+    txId ? vaultId : null,
+    {
+      enabled: !!txId && !!vaultId,
+      interval: 2000,
+      maxAttempts: 30, // 60 seconds max
+      onFound: (vault) => {
+        if (vault) {
+          setSuccess(`Vault created! Redirecting...`);
+          setTimeout(() => {
+            router.push(`/vaults/${encodeURIComponent(vaultId)}`);
+          }, 1000);
+        }
+      },
+    }
+  );
 
   const canSubmit =
     publicPath.trim().length > 0 &&
@@ -72,6 +93,17 @@ export default function Step3Page() {
       {success && (
         <div className="rounded border border-green-300 bg-green-50 p-2 text-sm text-green-700">
           {success}
+        </div>
+      )}
+      {txId && isPolling && (
+        <div className="rounded border border-blue-300 bg-blue-50 p-3 text-sm text-blue-700">
+          <div className="flex items-center gap-2">
+            <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+            <span>
+              Transaction submitted ({txId.slice(0, 8)}...). Waiting for vault to appear in database...
+              {attempts > 0 && <span className="ml-2 text-xs">({attempts}/30 attempts)</span>}
+            </span>
+          </div>
         </div>
       )}
       <div className="grid gap-3 md:grid-cols-3">
@@ -164,8 +196,15 @@ export default function Step3Page() {
             })()}
             mutation={{
               mutationKey: ["create-vault", vaultId],
-              onSuccess: (txId: string) => setSuccess(txId),
-              onError: (e: unknown) => setError((e as Error).message),
+              onSuccess: (txId: string) => {
+                setTxId(txId);
+                setSuccess(`Transaction submitted: ${txId}`);
+                setError(null);
+              },
+              onError: (e: unknown) => {
+                setError((e as Error).message);
+                setTxId(null);
+              },
             }}
           />
         )}

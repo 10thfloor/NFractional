@@ -1,0 +1,42 @@
+# Flow Event Types for Testnet
+# Format: A.{address}.{ContractName}.{EventName}
+# One event type per line, comments start with #
+# Address should be lowercase and without 0x prefix (Flow REST API standard)
+# The ingestor will automatically try the alternate format with 0x prefix
+
+# Fractional contract events (testnet-admin address: 237656746bc69765)
+A.237656746bc69765.Fractional.VaultCreated
+A.237656746bc69765.Fractional.SharesMinted
+A.237656746bc69765.Fractional.TransferModeChanged
+A.237656746bc69765.Fractional.Redeemed
+A.237656746bc69765.Fractional.BuyoutProposed
+A.237656746bc69765.Fractional.BuyoutVoted
+A.237656746bc69765.Fractional.BuyoutFinalized
+A.237656746bc69765.Fractional.BuyoutEscrowCreated
+A.237656746bc69765.Fractional.BuyoutEscrowCancelled
+A.237656746bc69765.Fractional.BuyoutEscrowClosed
+A.237656746bc69765.Fractional.DistributionScheduled
+A.237656746bc69765.Fractional.PayoutClaimed
+A.237656746bc69765.Fractional.ListingCreated
+A.237656746bc69765.Fractional.ListingFilled
+A.237656746bc69765.Fractional.ListingCancelled
+A.237656746bc69765.Fractional.ListingExpired
+A.237656746bc69765.Fractional.Transfer
+A.237656746bc69765.Fractional.UnderlyingDeposited
+A.237656746bc69765.Fractional.UnderlyingWithdrawn
+A.237656746bc69765.Fractional.UnderlyingBurned
+A.237656746bc69765.Fractional.MaxSupplySet
+A.237656746bc69765.Fractional.FeeParamsProposed
+A.237656746bc69765.Fractional.FeeParamsActivated
+A.237656746bc69765.Fractional.FeeParamsSet
+A.237656746bc69765.Fractional.FeeAccrued
+
+# ConstantProductAMM contract events (testnet-admin address: 237656746bc69765)
+A.237656746bc69765.ConstantProductAMM.PoolCreated
+A.237656746bc69765.ConstantProductAMM.LiquidityAdded
+A.237656746bc69765.ConstantProductAMM.LiquidityRemoved
+A.237656746bc69765.ConstantProductAMM.Swap
+
+# DistributionHandler contract events (testnet-admin address: 237656746bc69765)
+A.237656746bc69765.DistributionHandler.DistributionExecutionTriggered
+

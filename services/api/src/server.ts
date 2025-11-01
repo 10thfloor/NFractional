@@ -308,9 +308,10 @@ async function buildServer() {
   });
 
   // Deploy-only endpoint for per-vault FT contract (no registration to vault)
-  // DEV-ONLY: Deploy FT contract without registering to a vault.
-  // Hidden in production to avoid parallel flows.
-  if (ENV.NODE_ENV !== "production")
+  // Available on testnet and emulator (dev environments)
+  const isDevNetwork =
+    ENV.FLOW_NETWORK === "testnet" || ENV.FLOW_NETWORK === "emulator";
+  if (isDevNetwork || ENV.NODE_ENV !== "production") {
     app.post("/contracts/series-ft-deploy", async (req, reply) => {
       try {
         const body = (req.body || {}) as {
@@ -356,11 +357,10 @@ async function buildServer() {
         return { error: (e as Error).message };
       }
     });
+  }
 
   // Dev-only endpoint to mint ExampleNFT to a recipient, ensuring collection setup
   // Available on testnet and emulator (not mainnet)
-  const isDevNetwork =
-    ENV.FLOW_NETWORK === "testnet" || ENV.FLOW_NETWORK === "emulator";
   console.log(
     `[server] FLOW_NETWORK=${ENV.FLOW_NETWORK}, isDevNetwork=${isDevNetwork}, registering /dev/mint-example: ${isDevNetwork}`
   );

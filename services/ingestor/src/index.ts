@@ -1,6 +1,8 @@
 import { connect, StringCodec } from "nats";
 import client from "prom-client";
 import * as fcl from "@onflow/fcl";
+import fs from "node:fs";
+import path from "node:path";
 
 type RawEvent = {
   network: string;
@@ -51,6 +53,43 @@ function isCadenceField(value: unknown): value is CadenceField {
   );
 }
 
+// Load event types from file or environment variable
+function loadEventTypes(): string[] {
+  const eventTypesFile = process.env.EVENT_TYPES_FILE;
+  if (eventTypesFile) {
+    try {
+      const filePath = path.isAbsolute(eventTypesFile)
+        ? eventTypesFile
+        : path.resolve(process.cwd(), eventTypesFile);
+      if (!fs.existsSync(filePath)) {
+        console.warn(
+          `[ingestor] EVENT_TYPES_FILE not found: ${filePath}, falling back to EVENT_TYPES env var`
+        );
+        return (process.env.EVENT_TYPES || "").split(",").filter(Boolean);
+      }
+      const content = fs.readFileSync(filePath, "utf8");
+      // Parse file: one event type per line, comments start with #
+      const eventTypes = content
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line && !line.startsWith("#"))
+        .filter(Boolean);
+      console.log(
+        `[ingestor] loaded ${eventTypes.length} event types from ${filePath}`
+      );
+      return eventTypes;
+    } catch (e) {
+      console.error(
+        `[ingestor] failed to load EVENT_TYPES_FILE: ${eventTypesFile}`,
+        e
+      );
+      return (process.env.EVENT_TYPES || "").split(",").filter(Boolean);
+    }
+  }
+  // Fallback to environment variable (comma-separated)
+  return (process.env.EVENT_TYPES || "").split(",").filter(Boolean);
+}
+
 const ENV = {
   NETWORK: process.env.NETWORK || "emulator",
   NATS_URL: process.env.NATS_URL || "nats://nats:4222",
@@ -58,7 +97,7 @@ const ENV = {
   START_HEIGHT: Number(process.env.START_HEIGHT || 0),
   POLL_MS: Number(process.env.POLL_MS || 1500),
   BATCH: Number(process.env.BATCH || 250),
-  EVENT_TYPES: (process.env.EVENT_TYPES || "").split(",").filter(Boolean),
+  EVENT_TYPES: loadEventTypes(),
   RESET_CHECKPOINT: process.env.RESET_CHECKPOINT === "1",
   // ALLOW_SYNTHETIC: process.env.ALLOW_SYNTHETIC === "1",
   // SYNTHETIC_VAULT_ID: process.env.SYNTHETIC_VAULT_ID || "vlt-synth",
@@ -121,7 +160,6 @@ async function main() {
       try {
         const sc = StringCodec();
         await kv.put(`${ENV.NETWORK}.ingestor`, sc.encode(String(h)));
-        console.log("[ingestor] checkpoint updated", h);
         return;
       } catch (err) {
         if (i === delays.length - 1) {
@@ -137,81 +175,73 @@ async function main() {
   let cursor = await getCheckpoint();
   if (ENV.EVENT_TYPES.length === 0) {
     console.warn("No EVENT_TYPES provided; nothing to ingest.");
+  } else {
+    console.log(
+      `[ingestor] Loaded ${ENV.EVENT_TYPES.length} event types, starting from block ${cursor}`
+    );
   }
 
-  // // Optional: publish one synthetic RAW event to enable smoke test without Flow
-  // if (ENV.ALLOW_SYNTHETIC) {
-  //   setTimeout(async () => {
-  //     try {
-  //       const body: RawEvent = {
-  //         network: ENV.NETWORK,
-  //         blockHeight: 1,
-  //         txIndex: 0,
-  //         evIndex: 0,
-  //         txId: "t-ingestor-synthetic",
-  //         contract: { name: "Fractional", address: "0x01" },
-  //         type: "VaultCreated",
-  //         payload: {
-  //           vaultId: ENV.SYNTHETIC_VAULT_ID,
-  //           collection: "ExampleNFT",
-  //           tokenId: 42,
-  //           shareSymbol: ENV.SYNTHETIC_SYMBOL,
-  //           policy: "buyoutOnly",
-  //           creator: "0x01",
-  //         },
-  //       } as unknown as RawEvent;
-  //       await js.publish(
-  //         rawSubject("Fractional", "VaultCreated"),
-  //         JSON.stringify(body)
-  //       );
-  //       published.inc({ event: "VaultCreated" });
-  //       console.log(
-  //         "[ingestor] published synthetic RAW VaultCreated for smoke test"
-  //       );
-  //     } catch (e) {
-  //       console.warn("[ingestor] failed to publish synthetic event", e);
-  //     }
-  //   }, 800);
-  // }
-
+  // Main polling loop
   for (;;) {
     const latest = await getLatestSealedHeight();
-    console.log(
-      "[ingestor] latest sealed height",
-      latest,
-      `(cursor: ${cursor})`
-    );
     if (latest <= cursor) {
       await sleep(ENV.POLL_MS);
       continue;
     }
     const to = Math.min(latest, cursor + ENV.BATCH);
+    // Only log block range every 10 iterations to reduce log spam
+    const shouldLog = Date.now() % 10000 < ENV.POLL_MS;
+    if (shouldLog) {
+      console.log(
+        `[ingestor] Querying events from block ${
+          cursor + 1
+        } to ${to} (latest sealed: ${latest})`
+      );
+    }
+    let totalEventsFound = 0;
     for (const eventType of ENV.EVENT_TYPES) {
       const list = await getEventsRange(eventType, cursor + 1, to);
-      console.log("[ingestor] events", list.length);
-      for (const ev of list) {
-        console.log("[ingestor] event", ev);
-        const contractName = parseContractName(eventType);
-        const shortType = parseEventName(eventType);
-        const out: RawEvent = {
-          network: ENV.NETWORK,
-          blockHeight: Number(ev.blockHeight),
-          txIndex: Number(ev.transactionIndex || 0),
-          evIndex: Number(ev.eventIndex || 0),
-          txId: ev.transactionId,
-          contract: {
-            name: contractName,
-            address: `0x${eventType.split(".")[1]}`,
-          },
-          type: shortType,
-          // Publish raw Access event; normalization happens in normalizer
-          payload: ev as unknown,
-        };
-        const subject = rawSubject(contractName, shortType);
-        console.log("[ingestor] publish", subject);
-        await js.publish(subject, JSON.stringify(out));
-        published.inc({ event: shortType });
+      if (list.length > 0) {
+        console.log(`[ingestor] Found ${list.length} events for ${eventType}`);
+        totalEventsFound += list.length;
+        for (const ev of list) {
+          const contractName = parseContractName(eventType);
+          const shortType = parseEventName(eventType);
+          // Extract address from event type, handling both with and without 0x prefix
+          const addrPart = eventType.split(".")[1] || "";
+          const contractAddr = addrPart.startsWith("0x")
+            ? addrPart
+            : `0x${addrPart}`;
+          const out: RawEvent = {
+            network: ENV.NETWORK,
+            blockHeight: Number(ev.blockHeight),
+            txIndex: Number(ev.transactionIndex || 0),
+            evIndex: Number(ev.eventIndex || 0),
+            txId: ev.transactionId,
+            contract: {
+              name: contractName,
+              address: contractAddr,
+            },
+            type: shortType,
+            // Publish raw Access event; normalization happens in normalizer
+            payload: ev as unknown,
+          };
+          const subject = rawSubject(contractName, shortType);
+          await js.publish(subject, JSON.stringify(out));
+          published.inc({ event: shortType });
+        }
       }
+    }
+    if (totalEventsFound > 0) {
+      console.log(
+        `[ingestor] Published ${totalEventsFound} total events, advancing cursor to ${to}`
+      );
+    } else {
+      console.log(
+        `[ingestor] No events found in range ${
+          cursor + 1
+        }-${to}, advancing cursor`
+      );
     }
     cursor = to;
     await setCheckpoint(cursor);
@@ -281,7 +311,18 @@ async function getEventsRange(
       url.searchParams.set("type", et);
       url.searchParams.set("start_height", String(start));
       url.searchParams.set("end_height", String(end));
-      const res = (await fetch(url.toString()).then((r) =>
+      const fetchUrl = url.toString();
+      // Only log API requests occasionally to reduce spam
+      const shouldLogRequest = Math.random() < 0.01; // Log 1% of requests
+      if (shouldLogRequest) {
+        console.log(
+          `[ingestor] Querying Flow API: ${fetchUrl.replace(
+            /start_height=\d+&end_height=\d+/,
+            "start_height=...&end_height=..."
+          )}`
+        );
+      }
+      const res = (await fetch(fetchUrl).then((r) =>
         r.json()
       )) as AccessEventsResponse;
       // Flow emulator often returns a top-level array; Access REST may return { results: [...] }
@@ -309,10 +350,14 @@ async function getEventsRange(
           });
         }
       }
-      console.log("[ingestor] events", events.length, et, start, end);
-      if (events.length > 0) return events;
+      if (events.length > 0) {
+        console.log(
+          `[ingestor] Successfully fetched ${events.length} events for ${et}`
+        );
+        return events;
+      }
     } catch (e) {
-      console.warn("[ingestor] FLOW_ACCESS error when getting events", {
+      console.warn(`[ingestor] FLOW_ACCESS error when getting events`, {
         candidateType: et,
         start,
         end,

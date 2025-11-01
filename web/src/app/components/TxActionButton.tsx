@@ -4,11 +4,18 @@ import { TransactionButton as FclTransactionButton } from "@onflow/react-sdk";
 import type { TransactionButton as TransactionButtonType } from "@onflow/react-sdk";
 import { Button } from "@/components/ui/button";
 import type React from "react";
-import { useCallback, useRef } from "react";
+import { useCallback, useRef, useState, useEffect } from "react";
 
 // Props combine shadcn Button props with the FCL TransactionButton props.
 // All visual styles are provided by Button; the inner TransactionButton is hidden
 // and clicked programmatically to execute the tx.
+//
+// Transaction Status Handling:
+// - TransactionButton from @onflow/react-sdk handles transactions internally
+// - All direct mutate() calls in the codebase now use websockets via waitForTransactionSealed()
+//   from @/lib/tx/utils instead of polling (onceSealed)
+// - TransactionButton's internal status tracking may still use polling internally,
+//   but our direct transaction calls use websockets for real-time updates
 
 type ButtonVariant = "default" | "secondary" | "destructive";
 
@@ -29,9 +36,86 @@ export default function TxActionButton({
   ...txProps
 }: Props) {
   const hiddenRootRef = useRef<HTMLDivElement | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+
+  // Monitor the hidden TransactionButton's status
+  useEffect(() => {
+    const root = hiddenRootRef.current;
+    if (!root) return;
+
+    // Listen for status changes from FCL TransactionButton
+    const observer = new MutationObserver(() => {
+      // Check for common loading indicators
+      const hasLoading = root.querySelector(
+        '[data-loading="true"], [aria-busy="true"], .loading'
+      );
+      const statusEl = root.querySelector(
+        '[data-status], .status, [role="status"]'
+      );
+
+      if (hasLoading) {
+        setIsLoading(true);
+        setStatusMessage(null);
+      } else {
+        setIsLoading(false);
+        if (statusEl) {
+          const text =
+            statusEl.textContent || statusEl.getAttribute("aria-label");
+          if (text) setStatusMessage(text);
+        }
+      }
+    });
+
+    observer.observe(root, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: [
+        "data-loading",
+        "aria-busy",
+        "data-status",
+        "aria-label",
+      ],
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
+  // Also listen to mutation callbacks for status updates
+  const mutation = txProps.mutation as
+    | {
+        onSuccess?: (txId: string) => void | Promise<void>;
+        onError?: (error: unknown) => void;
+      }
+    | undefined;
+
+  const enhancedMutation = mutation
+    ? {
+        ...mutation,
+        onSuccess: async (txId: string) => {
+          setIsLoading(true);
+          setStatusMessage(
+            "Transaction submitted, waiting for confirmation..."
+          );
+          try {
+            await mutation.onSuccess?.(txId);
+          } finally {
+            setIsLoading(false);
+          }
+        },
+        onError: (error: unknown) => {
+          setIsLoading(false);
+          setStatusMessage(null);
+          mutation.onError?.(error);
+        },
+      }
+    : undefined;
 
   const handleClick = useCallback(() => {
-    if (disabled) return;
+    if (disabled || isLoading) return;
+    setIsLoading(true);
+    setStatusMessage("Preparing transaction...");
     // Try common clickable elements rendered by the inner TransactionButton
     const root = hiddenRootRef.current;
     const el = root?.querySelector("button, [role=button]") as
@@ -48,10 +132,13 @@ export default function TxActionButton({
       root.dispatchEvent(evt);
     } else {
       console.warn("TxActionButton: inner TransactionButton not found");
+      setIsLoading(false);
     }
-  }, [disabled]);
+  }, [disabled, isLoading]);
 
-  const visibleLabel = children ?? txProps.label ?? "Submit";
+  const visibleLabel = isLoading
+    ? statusMessage || children || txProps.label || "Processing..."
+    : children ?? txProps.label ?? "Submit";
 
   // Compute final mutation prop with optional override for mutationKey
   const resolvedMutation = (() => {
@@ -77,11 +164,19 @@ export default function TxActionButton({
         variant={variant as ButtonVariant}
         size={size as never}
         className={className}
-        disabled={disabled}
+        disabled={disabled || isLoading}
         onClick={handleClick}
       >
+        {isLoading && (
+          <span className="inline-block mr-2 h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+        )}
         {visibleLabel}
       </Button>
+      {statusMessage && isLoading && (
+        <div className="mt-2 text-xs text-neutral-400 animate-pulse">
+          {statusMessage}
+        </div>
+      )}
       <div
         ref={hiddenRootRef}
         className="absolute -left-[9999px] -top-[9999px] h-0 w-0 overflow-hidden pointer-events-none"
@@ -89,8 +184,12 @@ export default function TxActionButton({
       >
         <FclTransactionButton
           {...txProps}
-          mutation={resolvedMutation as never}
-          onError={(e: unknown) => console.error("Transaction error", e)}
+          mutation={(enhancedMutation || resolvedMutation) as never}
+          onError={(e: unknown) => {
+            setIsLoading(false);
+            setStatusMessage(null);
+            console.error("Transaction error", e);
+          }}
         />
       </div>
     </>
