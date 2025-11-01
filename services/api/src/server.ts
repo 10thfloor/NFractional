@@ -5,7 +5,7 @@ import client from "prom-client";
 import { z } from "zod";
 import { getSigningFunction } from "./lib/flowAuth";
 import cors from "@fastify/cors";
-import ENV from "./lib/env";
+import ENV, { validateProductionEnv } from "./lib/env";
 import with0x from "./lib/addr";
 
 import { txConfigureShareSupply, scriptShareBalance } from "./tx/shares";
@@ -18,7 +18,19 @@ import typeDefs from "./graphql/schema";
 import buildResolvers from "./graphql/resolvers";
 
 async function buildServer() {
+  // Validate production environment requirements
+  validateProductionEnv();
+
   const app = Fastify({ logger: false });
+
+  // Validate CORS configuration
+  if (ENV.NODE_ENV === "production") {
+    if (!ENV.CORS_ORIGIN || ENV.CORS_ORIGIN === "*") {
+      throw new Error(
+        "CORS_ORIGIN must be set to an explicit origin in production, not '*'"
+      );
+    }
+  }
 
   const corsOrigin: boolean | string | string[] =
     ENV.CORS_ORIGIN === "*"
@@ -190,13 +202,17 @@ async function buildServer() {
   // Secure admin remote authorization for FCL
   app.post("/flow/admin-sign", async (req, reply) => {
     try {
-      // 0) Bearer token check
-      // const authz = (req.headers["authorization"] || "").toString();
-      // const token = authz.startsWith("Bearer ") ? authz.slice(7) : "";
-      // if (!ENV.FLOW_ADMIN_SIGN_SECRET || token !== ENV.FLOW_ADMIN_SIGN_SECRET) {
-      //   reply.code(401);
-      //   return { error: "unauthorized" };
-      // }
+      // Bearer token authentication required only if FLOW_ADMIN_SIGN_SECRET is explicitly set
+      // In development, if not set via env var, auth is optional (backward compatible)
+      const secretEnvVar = process.env.FLOW_ADMIN_SIGN_SECRET;
+      if (secretEnvVar && secretEnvVar.trim().length > 0) {
+        const authz = (req.headers.authorization || "").toString();
+        const token = authz.startsWith("Bearer ") ? authz.slice(7) : "";
+        if (token !== secretEnvVar) {
+          reply.code(401);
+          return { error: "unauthorized" };
+        }
+      }
 
       const body = (req.body || {}) as { signable?: unknown };
       const schema = z.object({ signable: z.unknown() });

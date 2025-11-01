@@ -4,6 +4,8 @@ import "./globals.css";
 import FlowRootProvider from "./flow-provider";
 import ConditionalHeader from "./components/ConditionalHeader";
 import { AuthProvider } from "./components/AuthContext";
+import { TransactionStatusProvider } from "./TransactionStatusContext";
+import TransactionStatusModal from "./components/TransactionStatusModal";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -33,8 +35,11 @@ export default function RootLayout({
         {/* <GlobalGuards /> */}
         <FlowRootProvider>
           <AuthProvider>
+            <TransactionStatusProvider>
             <ConditionalHeader />
             {children}
+              <TransactionStatusModal />
+            </TransactionStatusProvider>
           </AuthProvider>
         </FlowRootProvider>
       </body>

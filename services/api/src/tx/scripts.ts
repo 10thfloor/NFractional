@@ -524,7 +524,10 @@ export async function txMintExampleNFTTo(input: {
 
   if (!recipient) throw new Error("recipient required");
   const code = getCadence("transactions/example-nft/admin/mint-to.cdc");
-  console.log("code", code);
+  // Only log Cadence code in development
+  if (process.env.NODE_ENV === "development") {
+    console.log("code", code);
+  }
 
   const signerAddr = ENV.FLOW_MINTER_ADDR;
   const signerKey = ENV.FLOW_MINTER_KEY;

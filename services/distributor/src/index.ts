@@ -113,15 +113,15 @@ function setAccessNode() {
 function getSigningFunction(addrNo0x: string, pkHex: string, keyIndex: number) {
   return async (signable: any) => {
     if (!pkHex || pkHex.trim().length === 0) {
-      throw new Error(
-        "FRACTIONAL_PLATFORM_ADMIN_KEY is empty. Set a valid hex private key in env."
-      );
+      // Log detailed error server-side only
+      console.error("Signing function error: Private key is empty");
+      throw new Error("Authentication failed: Invalid configuration");
     }
     const normalizedPkHex = pkHex.replace(/^0x/, "").toLowerCase();
     if (!/^[0-9a-f]+$/.test(normalizedPkHex)) {
-      throw new Error(
-        "FRACTIONAL_PLATFORM_ADMIN_KEY must be a hex string (optionally 0x-prefixed)."
-      );
+      // Log detailed error server-side only
+      console.error("Signing function error: Private key format invalid");
+      throw new Error("Authentication failed: Invalid key format");
     }
     const msg = Buffer.from(signable.message, "hex");
     const hasher = new SHA3(256);

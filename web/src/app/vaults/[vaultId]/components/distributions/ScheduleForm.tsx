@@ -50,11 +50,11 @@ export default function ScheduleForm({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  
+
   // Fetch vault treasury share balance
   const [treasuryBalance, setTreasuryBalance] = useState<string | null>(null);
   const [balanceLoading, setBalanceLoading] = useState(true);
-  
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -97,8 +97,8 @@ export default function ScheduleForm({
     }
 
     // Validate that startsAt < endsAt (Unix timestamps)
-    const startsAtNum = parseInt(form.startsAt, 10);
-    const endsAtNum = parseInt(form.endsAt, 10);
+    const startsAtNum = Number.parseInt(form.startsAt, 10);
+    const endsAtNum = Number.parseInt(form.endsAt, 10);
     if (isNaN(startsAtNum) || isNaN(endsAtNum)) {
       return false;
     }
@@ -146,7 +146,7 @@ export default function ScheduleForm({
       }
 
       const data = await res.json();
-      setSuccess(`Distribution scheduled! Transaction: ${data.txId}`);
+      setSuccess("Distribution scheduled successfully!");
       setForm({
         programId: `dist-${Date.now()}`,
         asset: vaultSymbol,
@@ -184,12 +184,14 @@ export default function ScheduleForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <Messages error={error} success={success} />
-      
+
       {/* Balance Display */}
       {treasuryBalance !== null && (
         <div className="rounded-md border border-neutral-700 bg-neutral-800/50 p-3">
           <div className="flex items-center justify-between mb-1">
-            <div className="text-xs text-neutral-400">Vault Treasury Balance</div>
+            <div className="text-xs text-neutral-400">
+              Vault Treasury Balance
+            </div>
             <button
               type="button"
               onClick={async () => {
@@ -222,15 +224,23 @@ export default function ScheduleForm({
               </span>
             )}
           </div>
-          {!balanceLoading && treasuryBalance && Number(treasuryBalance) <= 0 && (
-            <div className="mt-2 text-xs text-yellow-400">
-              No balance available. Cannot schedule distributions.
-            </div>
-          )}
+          {!balanceLoading &&
+            treasuryBalance &&
+            Number(treasuryBalance) <= 0 && (
+              <div className="mt-2 text-xs text-yellow-400">
+                No balance available. Cannot schedule distributions.
+              </div>
+            )}
         </div>
       )}
-      
-      <div className={`space-y-4 ${!balanceLoading && treasuryBalance && Number(treasuryBalance) <= 0 ? 'opacity-50 pointer-events-none' : ''}`}>
+
+      <div
+        className={`space-y-4 ${
+          !balanceLoading && treasuryBalance && Number(treasuryBalance) <= 0
+            ? "opacity-50 pointer-events-none"
+            : ""
+        }`}
+      >
         <div className="space-y-1">
           <label className="block text-[11px] text-gray-500 font-medium">
             Program ID
@@ -257,9 +267,7 @@ export default function ScheduleForm({
           <input
             type="text"
             value={form.asset}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, asset: e.target.value }))
-            }
+            onChange={(e) => setForm((f) => ({ ...f, asset: e.target.value }))}
             className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:outline-none focus:ring-2 focus:ring-neutral-600"
             placeholder={vaultSymbol}
             required
@@ -307,9 +315,7 @@ export default function ScheduleForm({
           </label>
           <DateTimePicker
             value={form.startsAt}
-            onChange={(value) =>
-              setForm((f) => ({ ...f, startsAt: value }))
-            }
+            onChange={(value) => setForm((f) => ({ ...f, startsAt: value }))}
             placeholder="Select start date and time"
           />
         </div>
@@ -320,9 +326,7 @@ export default function ScheduleForm({
           </label>
           <DateTimePicker
             value={form.endsAt}
-            onChange={(value) =>
-              setForm((f) => ({ ...f, endsAt: value }))
-            }
+            onChange={(value) => setForm((f) => ({ ...f, endsAt: value }))}
             placeholder="Select end date and time"
           />
         </div>
@@ -339,4 +343,3 @@ export default function ScheduleForm({
     </form>
   );
 }
-

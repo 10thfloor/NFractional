@@ -233,7 +233,7 @@ export default function Step2Page() {
                   });
                   if (!res.ok) throw new Error(await res.text());
                   const { txId } = await res.json();
-                  setSuccess(`Mint submitted: ${txId}`);
+                  setSuccess("Mint submitted successfully!");
                   if (user?.addr && pubIdent) {
                     const d = await fetchCollectionIds(user.addr, pubIdent);
                     setIds(d.collectionIds || []);

@@ -152,7 +152,8 @@ services:
 
   flow-indexer:
     build:
-      context: ./services/indexer
+      context: .
+      dockerfile: services/indexer/Dockerfile
     depends_on:
       nats:
         condition: service_started
@@ -229,7 +230,8 @@ services:
 
   flow-ingestor:
     build:
-      context: ./services/ingestor
+      context: .
+      dockerfile: services/ingestor/Dockerfile
     volumes:
       # Mount event type files for file-based configuration
       - ./infra/ingestor/events-emulator.txt:/app/events/events-emulator.txt:ro
@@ -254,7 +256,8 @@ services:
 
   flow-normalizer:
     build:
-      context: ./services/normalizer
+      context: .
+      dockerfile: services/normalizer/Dockerfile
     depends_on:
       nats:
         condition: service_started
@@ -349,7 +352,9 @@ services:
     volumes:
       - ./infra/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      # SECURITY: Set GF_SECURITY_ADMIN_PASSWORD via .env file
+      # Generate with: openssl rand -hex 16
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD:-admin}
       - GF_USERS_ALLOW_SIGN_UP=false
     ports:
       - "3000:3000"
@@ -362,6 +367,9 @@ services:
         condition: service_started
       nats-init:
         condition: service_completed_successfully
+    # SECURITY: Set NATS_SYS_USER and NATS_SYS_PASSWORD via .env file
+    # Generate password with: openssl rand -hex 16
+    # These must match the credentials in infra/nats/nats.conf
     command:
       [
         "-s",
@@ -369,9 +377,9 @@ services:
         "-c",
         "1",
         "--user",
-        "sys",
+        "${NATS_SYS_USER:-sys}",
         "--password",
-        "sys",
+        "${NATS_SYS_PASSWORD:-sys}",
         "--jsz",
         "all",
         "--accounts",

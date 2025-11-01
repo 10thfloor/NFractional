@@ -55,12 +55,19 @@ export function makeAdminAuth(admin: {
       // Setting sequenceNum to null tells FCL to fetch the latest account info
       sequenceNum: null,
       signingFunction: async (signable: unknown) => {
+        // Note: Backend authentication is optional - backend only requires auth
+        // if FLOW_ADMIN_SIGN_SECRET is explicitly set via environment variable.
+        // In local development, if not set, the endpoint works without auth.
+        // Secrets cannot be stored in NEXT_PUBLIC_ variables as they're exposed to the browser.
         const res = await fetch(`${API}/flow/admin-sign`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ signable }),
         });
-        if (!res.ok) throw new Error(await res.text());
+        if (!res.ok) {
+          const errorText = await res.text();
+          throw new Error(errorText || `HTTP ${res.status}`);
+        }
         const payload = await res.json();
         // Accept backend CompositeSignature as-is, otherwise adapt
         if (payload?.f_type && payload.f_vsn) {

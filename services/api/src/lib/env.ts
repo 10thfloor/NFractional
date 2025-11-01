@@ -24,6 +24,7 @@ const testnetAddrs = {
 // Determine network-based defaults
 const network = process.env.FLOW_NETWORK || "emulator";
 const isTestnet = network === "testnet";
+const isProduction = process.env.NODE_ENV === "production";
 
 export const ENV = {
   PORT: Number(process.env.PORT || 4000),
@@ -40,8 +41,9 @@ export const ENV = {
   FLOW_MINTER_KEY: process.env.FLOW_MINTER_KEY || "",
 
   // Security for /flow/admin-sign endpoint
-  // If unset, requests will be rejected. Generate a strong random string.
-  FLOW_ADMIN_SIGN_SECRET: process.env.FLOW_ADMIN_SIGN_SECRET || "keyboardcat",
+  // REQUIRED in production. Generate a strong random string (e.g., openssl rand -hex 32)
+  FLOW_ADMIN_SIGN_SECRET:
+    process.env.FLOW_ADMIN_SIGN_SECRET || (isProduction ? "" : "keyboardcat"),
   // Optional comma-separated list of SHA3-256 hashes (hex) of allowed Cadence sources
   // present in signable.voucher.cadence. Leave empty to skip cadence allowlisting.
   FLOW_ADMIN_SIGN_CADENCE_HASHES: (
@@ -52,9 +54,13 @@ export const ENV = {
     .filter(Boolean),
 
   // Admin API key for privileged GraphQL/HTTP mutations (header: X-Admin-Auth)
-  ADMIN_API_KEY: process.env.ADMIN_API_KEY || "keyboard-cat",
+  // REQUIRED in production. Generate a strong random string (e.g., openssl rand -hex 32)
+  ADMIN_API_KEY:
+    process.env.ADMIN_API_KEY || (isProduction ? "" : "keyboard-cat"),
 
-  CORS_ORIGIN: process.env.CORS_ORIGIN || "*",
+  // CORS origin - REQUIRED in production. Must be explicit origin(s), not "*"
+  // Examples: "https://flow-web.fly.dev" or "http://localhost:3000,https://example.com"
+  CORS_ORIGIN: process.env.CORS_ORIGIN || (isProduction ? "" : "*"),
   NODE_ENV: process.env.NODE_ENV || "development",
 
   // Canonical contract addresses (hex without 0x) — prefer these going forward.
@@ -147,5 +153,43 @@ export const ENV = {
     .map((s) => s.trim())
     .filter(Boolean),
 } as const;
+
+/**
+ * Validate that all required secrets are set in production environment.
+ * Throws an error with clear messages if any required secrets are missing.
+ */
+export function validateProductionEnv(): void {
+  if (!isProduction) {
+    return; // Skip validation in development
+  }
+
+  const missing: string[] = [];
+
+  if (!ENV.FLOW_ADMIN_SIGN_SECRET || ENV.FLOW_ADMIN_SIGN_SECRET.trim() === "") {
+    missing.push("FLOW_ADMIN_SIGN_SECRET");
+  }
+
+  if (!ENV.ADMIN_API_KEY || ENV.ADMIN_API_KEY.trim() === "") {
+    missing.push("ADMIN_API_KEY");
+  }
+
+  if (!ENV.CORS_ORIGIN || ENV.CORS_ORIGIN.trim() === "") {
+    missing.push("CORS_ORIGIN");
+  }
+
+  if (ENV.CORS_ORIGIN === "*") {
+    throw new Error(
+      "CORS_ORIGIN cannot be '*' in production. Set an explicit origin (e.g., 'https://flow-web.fly.dev')"
+    );
+  }
+
+  if (missing.length > 0) {
+    throw new Error(
+      `Missing required environment variables in production: ${missing.join(
+        ", "
+      )}. Generate strong secrets using: openssl rand -hex 32`
+    );
+  }
+}
 
 export default ENV;

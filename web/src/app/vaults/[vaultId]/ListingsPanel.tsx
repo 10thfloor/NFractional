@@ -109,12 +109,11 @@ export default function ListingsPanel({
             vaultSymbol={vaultSymbol}
             onSuccess={async (txId: string) => {
               try {
-                setSuccess(`Transaction submitted: ${txId}. Waiting for confirmation...`);
                 // Wait for transaction to be sealed via websocket
                 await waitForTransactionSealed(fcl, txId);
                 // Reload listings to show the new listing
                 await reload();
-                setSuccess(`Listing created successfully! Transaction: ${txId}`);
+                setSuccess("Listing created successfully!");
                 setForm({
                   listingId: "",
                   priceAsset: "FLOW",
@@ -127,7 +126,7 @@ export default function ListingsPanel({
                 );
                 console.error("ListingForm onSuccess error", e);
               }
-            },
+            }}
             onError={(e: unknown) => {
               setLocalError((e as Error).message);
               console.error("ListingForm onError", e);
@@ -154,14 +153,14 @@ export default function ListingsPanel({
                   await waitForTransactionSealed(fcl, txId);
                   // Reload listings to reflect the change
                   await reload();
-                  setSuccess(`Transaction completed: ${txId}`);
+                  setSuccess("Transaction completed successfully!");
                 } catch (e) {
                   setLocalError(
                     `Transaction failed: ${(e as Error).message || String(e)}`
                   );
                   console.error("ListingsList onSuccess error", e);
                 }
-              },
+              }}
               onError={(e: unknown) => {
                 console.error("ListingsList onError", e);
                 setLocalError((e as Error).message);

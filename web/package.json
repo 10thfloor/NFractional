@@ -13,6 +13,7 @@
   "dependencies": {
     "@flow-hackathon/cadence": "file:../packages/cadence",
     "@onflow/react-sdk": "0.10.3",
+    "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-popover": "^1.1.15",
     "@radix-ui/react-select": "^2.2.6",
     "@radix-ui/react-slot": "^1.2.3",

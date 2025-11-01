@@ -43,7 +43,9 @@ export default function VaultShareSetupRow({
         shareTokenMeta={ftMeta}
         flowAddrs={flowAddrs as unknown as Record<string, unknown>}
         disabled={!adminReady}
-        onSuccess={(txId: string) => setSuccess(`Submitted tx ${txId}`)}
+        onSuccess={(txId: string) =>
+          setSuccess("Transaction submitted successfully!")
+        }
         onError={(e: unknown) => setLocalError((e as Error).message)}
       />
       {/* Optional small status row */}

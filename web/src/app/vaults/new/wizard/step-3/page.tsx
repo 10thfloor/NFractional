@@ -49,22 +49,23 @@ export default function Step3Page() {
   const router = useRouter();
 
   // Poll for vault after transaction succeeds
-  const { vault: polledVault, isLoading: isPolling, attempts } = usePollVault(
-    txId ? vaultId : null,
-    {
-      enabled: !!txId && !!vaultId,
-      interval: 2000,
-      maxAttempts: 30, // 60 seconds max
-      onFound: (vault) => {
-        if (vault) {
-          setSuccess(`Vault created! Redirecting...`);
-          setTimeout(() => {
-            router.push(`/vaults/${encodeURIComponent(vaultId)}`);
-          }, 1000);
-        }
-      },
-    }
-  );
+  const {
+    vault: polledVault,
+    isLoading: isPolling,
+    attempts,
+  } = usePollVault(txId ? vaultId : null, {
+    enabled: !!txId && !!vaultId,
+    interval: 2000,
+    maxAttempts: 30, // 60 seconds max
+    onFound: (vault) => {
+      if (vault) {
+        setSuccess(`Vault created! Redirecting...`);
+        setTimeout(() => {
+          router.push(`/vaults/${encodeURIComponent(vaultId)}`);
+        }, 1000);
+      }
+    },
+  });
 
   const canSubmit =
     publicPath.trim().length > 0 &&
@@ -100,8 +101,11 @@ export default function Step3Page() {
           <div className="flex items-center gap-2">
             <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
             <span>
-              Transaction submitted ({txId.slice(0, 8)}...). Waiting for vault to appear in database...
-              {attempts > 0 && <span className="ml-2 text-xs">({attempts}/30 attempts)</span>}
+              Transaction submitted ({txId.slice(0, 8)}...). Waiting for vault
+              to appear in database...
+              {attempts > 0 && (
+                <span className="ml-2 text-xs">({attempts}/30 attempts)</span>
+              )}
             </span>
           </div>
         </div>
@@ -198,7 +202,7 @@ export default function Step3Page() {
               mutationKey: ["create-vault", vaultId],
               onSuccess: (txId: string) => {
                 setTxId(txId);
-                setSuccess(`Transaction submitted: ${txId}`);
+                setSuccess("Transaction submitted successfully!");
                 setError(null);
               },
               onError: (e: unknown) => {

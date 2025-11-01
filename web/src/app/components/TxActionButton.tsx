@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import type React from "react";
 import { useCallback, useRef, useState, useEffect } from "react";
 import { useFlowClient, useFlowCurrentUser } from "@onflow/react-sdk";
+import { useTransactionStatusModal } from "@/app/TransactionStatusContext";
 
 // Props combine shadcn Button props with the FCL TransactionButton props.
 // All visual styles are provided by Button; the inner TransactionButton is hidden
@@ -45,6 +46,7 @@ export default function TxActionButton({
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const fcl = useFlowClient();
   const { user } = useFlowCurrentUser();
+  const { showTransaction } = useTransactionStatusModal();
 
   // Monitor the hidden TransactionButton's status
   useEffect(() => {
@@ -102,9 +104,8 @@ export default function TxActionButton({
         ...mutation,
         onSuccess: async (txId: string) => {
           setIsLoading(true);
-          // setStatusMessage(
-          //   "Transaction submitted, waiting for confirmation..."
-          // );
+          // Show transaction status modal immediately
+          showTransaction(txId);
           try {
             await mutation.onSuccess?.(txId);
           } finally {
