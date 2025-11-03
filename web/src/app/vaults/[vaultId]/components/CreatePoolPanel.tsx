@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
+import NumericInput from "@/components/form/NumericInput";
 import TxActionButton from "@/app/components/TxActionButton";
 import { createPoolTxAliased } from "@/lib/tx/amm";
 import { useFlowClient, useFlowCurrentUser } from "@onflow/react-sdk";
@@ -87,12 +88,12 @@ export default function CreatePoolPanel({
           <label htmlFor="feeBps" className="text-gray-500">
             Fee (bps)
           </label>
-          <Input
-            type="number"
+          <NumericInput
             id="feeBps"
             className="w-24"
             value={feeBps}
-            onChange={(e) => setFeeBps(e.target.value)}
+            onValueChange={setFeeBps}
+            decimals={0}
           />
         </div>
         <TxActionButton

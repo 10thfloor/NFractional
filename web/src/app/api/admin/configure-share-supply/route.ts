@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/graphql";
-const DEFAULT_NETWORK = process.env.NEXT_PUBLIC_NETWORK || "emulator";
+const DEFAULT_NETWORK = process.env.NEXT_PUBLIC_FLOW_NETWORK || "emulator";
 
 export async function POST(request: NextRequest) {
   try {

@@ -30,6 +30,8 @@ type Props = React.ComponentProps<typeof Button> &
     children?: React.ReactNode;
     // Optional dynamic mutation key to drive react-query caching semantics
     mutationKey?: unknown[] | (() => unknown[]);
+    // Optional hook to run before executing the transaction (e.g., JIT provisioning)
+    beforeExecute?: () => Promise<void> | void;
   };
 
 export default function TxActionButton({
@@ -39,6 +41,7 @@ export default function TxActionButton({
   disabled,
   children,
   mutationKey,
+  beforeExecute,
   ...txProps
 }: Props) {
   const hiddenRootRef = useRef<HTMLDivElement | null>(null);
@@ -137,6 +140,18 @@ export default function TxActionButton({
       }
     }
 
+    // Run optional preflight (e.g., ensure-ready)
+    try {
+      if (beforeExecute) {
+        await beforeExecute();
+      }
+    } catch (e) {
+      setIsLoading(false);
+      setStatusMessage(null);
+      console.error("Pre-execution hook failed", e);
+      return;
+    }
+
     // Try common clickable elements rendered by the inner TransactionButton
     const root = hiddenRootRef.current;
     const el = root?.querySelector("button, [role=button]") as
@@ -155,7 +170,7 @@ export default function TxActionButton({
       console.warn("TxActionButton: inner TransactionButton not found");
       setIsLoading(false);
     }
-  }, [disabled, isLoading, user?.addr, fcl]);
+  }, [disabled, isLoading, user?.addr, fcl, beforeExecute]);
 
   const visibleLabel = isLoading
     ? statusMessage || children || txProps.label || "Processing..."

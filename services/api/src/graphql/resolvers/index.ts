@@ -816,6 +816,37 @@ export function buildResolvers(cassandra: Cassandra) {
           return null;
         }
       },
+      async symbolAvailable(
+        _: unknown,
+        { network, symbol }: { network: string; symbol: string }
+      ) {
+        const schema = z.object({
+          network: z.string().min(2),
+          symbol: z.string().regex(/^[A-Z0-9_]{3,16}$/),
+        });
+        const parsed = schema.parse({ network, symbol });
+        if (parsed.network !== ENV.FLOW_NETWORK)
+          throw new Error("network mismatch");
+        const sym = parsed.symbol.toUpperCase();
+        const { scriptVaultIdBySymbol } = await import("../../tx/scripts");
+        const existing = await scriptVaultIdBySymbol(sym);
+        return { available: !existing } as const;
+      },
+      async vaultIdAvailable(
+        _: unknown,
+        { network, vaultId }: { network: string; vaultId: string }
+      ) {
+        const schema = z.object({
+          network: z.string().min(2),
+          vaultId: z.string().regex(/^[A-Za-z0-9_-]{3,32}$/),
+        });
+        const parsed = schema.parse({ network, vaultId });
+        if (parsed.network !== ENV.FLOW_NETWORK)
+          throw new Error("network mismatch");
+        const { scriptVaultIdExists } = await import("../../tx/scripts");
+        const exists = await scriptVaultIdExists(parsed.vaultId);
+        return { available: !exists } as const;
+      },
       async quoteWithFees(
         _: unknown,
         args: { network: string; priceAmount: string; vaultId: string }
@@ -965,30 +996,41 @@ export function buildResolvers(cassandra: Cassandra) {
       ) {
         const schema = z.object({
           network: z.string().min(2),
-          vaultId: z.string().min(3),
+          vaultId: z.string().regex(/^[A-Za-z0-9_-]{3,32}$/),
           collectionStoragePath: z.string().min(1),
           collectionPublicPath: z.string().min(1),
           tokenId: z.string().regex(/^\d+$/),
-          shareSymbol: z.string().min(1),
+          shareSymbol: z.string().regex(/^[A-Z0-9_]{3,16}$/),
           policy: z.string().min(1),
           creator: z.string().min(2),
         });
         const parsed = schema.parse(args);
         if (parsed.network !== ENV.FLOW_NETWORK)
           throw new Error("network mismatch");
+        const sym = parsed.shareSymbol.toUpperCase();
+        // Preflight uniqueness checks to avoid Cadence precondition failures
+        const { scriptVaultIdExists, scriptVaultIdBySymbol } = await import(
+          "../../tx/scripts"
+        );
+        if (await scriptVaultIdExists(parsed.vaultId)) {
+          throw new Error("vaultId is already taken");
+        }
+        if ((await scriptVaultIdBySymbol(sym)) != null) {
+          throw new Error("share symbol is already taken");
+        }
         const txId = await txRegisterVaultFromNFT({
           vaultId: parsed.vaultId,
           collectionStoragePath: parsed.collectionStoragePath,
           collectionPublicPath: parsed.collectionPublicPath,
           tokenId: parsed.tokenId,
-          shareSymbol: parsed.shareSymbol,
+          shareSymbol: sym,
           policy: parsed.policy,
           creator: parsed.creator,
         });
         // After successful vault registration, auto-setup per‑vault share token and treasuries (FLOW + share token)
         try {
           const { txAutosetupVaultFT } = await import("../../tx/vaults");
-          const contractName = `VaultShareToken_${parsed.shareSymbol.replace(
+          const contractName = `VaultShareToken_${sym.replace(
             /[^A-Za-z0-9_]/g,
             "_"
           )}`;
@@ -996,7 +1038,7 @@ export function buildResolvers(cassandra: Cassandra) {
             vaultId: parsed.vaultId,
             contractName,
             name: `Vault ${parsed.vaultId} Share Token`,
-            symbol: parsed.shareSymbol,
+            symbol: sym,
             decimals: 8,
             maxSupply: null,
           });
@@ -1318,17 +1360,13 @@ export function buildResolvers(cassandra: Cassandra) {
             shareTokenAddress,
           });
           return { txId: flowTreasuryTxId };
-        } else {
-          // Only ensure FLOW treasury
-          const { txEnsureTreasuriesDynamic } = await import(
-            "../../tx/treasury"
-          );
-          const flowTreasuryTxId = await txEnsureTreasuriesDynamic({
-            tokenIdent: "FLOW",
-            vaultId,
-          });
-          return { txId: flowTreasuryTxId };
         }
+        // Only ensure FLOW treasury
+        const { txEnsureFlowTreasuries } = await import("../../tx/treasury");
+        const flowTreasuryTxId = await txEnsureFlowTreasuries({
+          vaultId,
+        });
+        return { txId: flowTreasuryTxId };
       },
       async settleListing(
         _: unknown,
@@ -1356,6 +1394,39 @@ export function buildResolvers(cassandra: Cassandra) {
         const parsed = schema.parse(args);
         if (parsed.network !== ENV.FLOW_NETWORK)
           throw new Error("network mismatch");
+        // JIT ensure treasuries are ready before settlement (idempotent)
+        try {
+          const fclMod = await import("@onflow/fcl");
+          const accessUrl = ENV.FLOW_ACCESS.startsWith("http")
+            ? ENV.FLOW_ACCESS
+            : `http://${ENV.FLOW_ACCESS}`;
+          fclMod.config().put("accessNode.api", accessUrl);
+          const code = `
+            import Fractional from ${with0x(ENV.FLOW_CONTRACT_FRACTIONAL)}
+            access(all) view fun main(vaultId: String): {String: String}? {
+              return Fractional.getVaultFT(vaultId: vaultId)
+            }
+          `;
+          const ft = (await fclMod.query({
+            cadence: code,
+            args: (arg: any, t: any) => [arg(parsed.vaultId, t.String)],
+          })) as { address?: string; name?: string } | null;
+          if (ft?.address && ft?.name) {
+            const { txEnsureVaultReady } = await import("../../tx/treasury");
+            await txEnsureVaultReady({
+              vaultId: parsed.vaultId,
+              shareTokenIdent: String(ft.name),
+              shareTokenAddress: with0x(String(ft.address)),
+            });
+          } else {
+            const { txEnsureFlowTreasuries } = await import(
+              "../../tx/treasury"
+            );
+            await txEnsureFlowTreasuries({ vaultId: parsed.vaultId });
+          }
+        } catch {
+          // Non-fatal; settlement may still succeed if already ready
+        }
         const { txSettleListing } = await import("../../tx/listings");
         const txId = await txSettleListing({
           vaultId: parsed.vaultId,

@@ -255,22 +255,43 @@ export async function getPoolEvents(
 export async function ensureVaultTreasury(
   vaultId: string
 ): Promise<{ txId: string }> {
-  const res = await fetch("/api/admin/ensure-vault-treasury", {
+  const API = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:4000";
+  const res = await fetch(`${API}/pools/ensure-ready`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ vaultId }),
-    cache: "no-store",
   });
-
   if (!res.ok) {
-    const error = await res
-      .json()
-      .catch(() => ({ error: `HTTP ${res.status}` }));
-    throw new Error(error.error || `HTTP error ${res.status}`);
+    const text = await res.text().catch(() => "");
+    throw new Error(text || `HTTP ${res.status}`);
   }
+  const data = (await res.json()) as {
+    shareTreasuryTxId?: string;
+    flowTreasuryTxId?: string;
+  };
+  return { txId: data.flowTreasuryTxId || data.shareTreasuryTxId || "" };
+}
 
-  const data = await res.json();
-  return { txId: data.txId };
+export type TreasuryStatus = {
+  platformFlow: boolean;
+  platformShare: boolean;
+  vaultFlow: boolean;
+  vaultShare: boolean;
+  shareIdent?: string | null;
+};
+
+export async function getTreasuryStatus(
+  vaultId: string
+): Promise<TreasuryStatus> {
+  const API = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:4000";
+  const r = await fetch(
+    `${API}/pools/treasury-status?vaultId=${encodeURIComponent(vaultId)}`,
+    { cache: "no-store" }
+  );
+  if (!r.ok) {
+    const text = await r.text().catch(() => "");
+    throw new Error(text || `HTTP ${r.status}`);
+  }
+  const s = (await r.json()) as TreasuryStatus;
+  return s;
 }

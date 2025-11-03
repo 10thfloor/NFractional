@@ -1,5 +1,5 @@
 import * as fcl from "@onflow/fcl";
-import { txEnsureTreasuriesDynamic } from "./treasury";
+import { txEnsureShareTreasuries, txEnsureFlowTreasuries } from "./treasury";
 // Source-of-truth: see matching Cadence files under flow/cadence/transactions/vault (admin/user)
 import t from "@onflow/types";
 import ENV from "../lib/env";
@@ -143,7 +143,7 @@ export async function txRegisterVaultFT(input: {
       fcl.limit(9999),
     ])
     .then(fcl.decode);
-  
+
   // Wait for transaction to be EXECUTED (not just sealed) to ensure metadata is queryable
   let txStatus: { status: number };
   do {
@@ -157,7 +157,7 @@ export async function txRegisterVaultFT(input: {
       `Transaction ${txId} did not execute successfully. Status: ${txStatus.status}`
     );
   }
-  
+
   return txId as string;
 }
 
@@ -226,7 +226,7 @@ export async function txRegisterVaultFromNFT(input: {
       fcl.limit(9999),
     ])
     .then(fcl.decode);
-  
+
   // Wait for transaction to be EXECUTED (not just sealed) to ensure metadata is queryable
   let txStatus: { status: number };
   do {
@@ -240,7 +240,7 @@ export async function txRegisterVaultFromNFT(input: {
       `Transaction ${txId} did not execute successfully. Status: ${txStatus.status}`
     );
   }
-  
+
   return txId as string;
 }
 
@@ -299,17 +299,15 @@ export async function txAutosetupVaultFT(input: {
     symbol: input.symbol,
   });
 
-  const treasuryTxId = await txEnsureTreasuriesDynamic({
-    tokenIdent: ft.name, // per‑vault share FT contract name
-    vaultId: input.vaultId, // per‑vault treasury
-    contractName: ft.name, // tokenIdent IS the contract name
-    contractAddress: ft.address, // Required for aliasing VaultShareToken import
+  const treasuryTxId = await txEnsureShareTreasuries({
+    vaultId: input.vaultId,
+    contractName: ft.name,
+    contractAddress: ft.address,
   });
 
   // Ensure FLOW treasuries for this vault as well, so AMM fee routing in FLOW succeeds
   // FLOW doesn't need contract metadata - it uses a placeholder
-  const flowTreasuryTxId = await txEnsureTreasuriesDynamic({
-    tokenIdent: "FLOW",
+  const flowTreasuryTxId = await txEnsureFlowTreasuries({
     vaultId: input.vaultId,
   });
 

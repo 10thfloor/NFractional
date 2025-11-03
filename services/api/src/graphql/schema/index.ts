@@ -176,6 +176,10 @@ export const typeDefs = /* GraphQL */ `
     feeBps: Int
   }
 
+  type Availability {
+    available: Boolean!
+  }
+
   type Event {
     network: String!
     vaultId: String!
@@ -347,6 +351,10 @@ export const typeDefs = /* GraphQL */ `
 
     # NFT metadata views (Display)
     vaultNftDisplay(network: String!, vaultId: String!): NFTDisplay
+
+    # Availability checks
+    symbolAvailable(network: String!, symbol: String!): Availability!
+    vaultIdAvailable(network: String!, vaultId: String!): Availability!
   }
 
   type NFTCollection {

@@ -4,6 +4,7 @@ import ENV from "../lib/env";
 import { getCadence } from "../lib/cadence";
 import { getLocalAuthTriplet } from "../lib/flowAuth";
 import { aliasVaultShareImport, with0x } from "../lib/addr";
+import { toSafePathIdentifier } from "../lib/ident";
 
 function setAccessNode() {
   const accessUrl = ENV.FLOW_ACCESS.startsWith("http")
@@ -12,68 +13,80 @@ function setAccessNode() {
   fcl.config().put("accessNode.api", accessUrl);
 }
 
-export async function txEnsureTreasuriesDynamic(input: {
-  tokenIdent: string; // e.g., share FT contract name or "FLOW"
-  vaultId?: string | null; // optional: per-vault treasury
-  contractName?: string | null; // optional: contract name for aliasing (only needed for non-FLOW)
-  contractAddress?: string | null; // optional: contract address for aliasing (only needed for non-FLOW)
+export async function txEnsureShareTreasuries(input: {
+  vaultId?: string | null;
+  contractName: string; // concrete per‑vault FT name
+  contractAddress: string; // 0x-prefixed address
 }): Promise<string> {
   setAccessNode();
-
-  let code = getCadence(
-    "transactions/treasury/admin/ensure_treasuries_dynamic.cdc"
-  );
-
-  // Only alias VaultShareToken import for non-FLOW tokens
-  // For FLOW, we still need to resolve the import but can use a placeholder
-  if (input.tokenIdent !== "FLOW") {
-    if (!input.contractName || !input.contractAddress) {
-      throw new Error(
-        `Contract name and address are required for share token ${input.tokenIdent}`
-      );
-    }
-    const formattedAddr = with0x(input.contractAddress);
-    code = aliasVaultShareImport(code, input.contractName, formattedAddr);
-  } else {
-    // For FLOW transactions, use a placeholder contract address
-    // The import exists but won't be used in the FLOW branch
-    // Use the emulator address where VaultShareToken is deployed (or Fractional contract address as fallback)
-    const placeholderAddress =
-      ENV.FLOW_CONTRACT_FRACTIONAL || "f8d6e0586b0a20c7";
-    const placeholderName = "VaultShareToken"; // Generic placeholder
-    code = aliasVaultShareImport(
-      code,
-      placeholderName,
-      with0x(placeholderAddress)
+  if (!input.contractName || !input.contractAddress) {
+    throw new Error(
+      "contractName and contractAddress are required for share treasuries"
     );
   }
-
-  // Verify alias was applied
-  const aliasApplied =
-    code.includes("import ") && code.includes("as VaultShareToken");
-  if (!aliasApplied) {
-    throw new Error("Failed to alias VaultShareToken import");
+  if (input.contractName === "VaultShareToken") {
+    throw new Error(
+      "Invalid alias: contractName must not be 'VaultShareToken'"
+    );
   }
-
-  // Final verification
-  const hasUnresolvedImport = /import\s+["']VaultShareToken["']/.test(code);
-  if (hasUnresolvedImport) {
-    throw new Error("VaultShareToken import not handled before sending");
+  let code = getCadence(
+    "transactions/treasury/admin/ensure_share_treasuries.cdc"
+  );
+  const formattedAddr = with0x(input.contractAddress);
+  code = aliasVaultShareImport(code, input.contractName, formattedAddr);
+  const expectedAlias = `import ${input.contractName} as VaultShareToken from ${formattedAddr}`;
+  if (
+    !code.includes(expectedAlias) ||
+    /import\s+["']VaultShareToken["']/.test(code)
+  ) {
+    throw new Error(
+      "Alias failed for VaultShareToken in ensure_share_treasuries"
+    );
   }
-
   const { proposer } = getLocalAuthTriplet(
     ENV.FRACTIONAL_PLATFORM_ADMIN_ADDRESS,
     ENV.FRACTIONAL_PLATFORM_ADMIN_KEY,
     0
   );
+  const rawSuffix = input.vaultId ? toSafePathIdentifier(input.vaultId) : null;
+  const suffix = rawSuffix && rawSuffix.length > 0 ? rawSuffix : "P_id";
 
   const txId = await fcl
     .send([
       fcl.transaction(code),
       fcl.args([
-        fcl.arg(input.tokenIdent, t.String),
-        fcl.arg(input.vaultId ?? null, t.Optional(t.String)),
+        fcl.arg(input.contractName, t.String),
+        fcl.arg(suffix ?? null, t.Optional(t.String)),
       ]),
+      fcl.proposer(proposer as any),
+      fcl.payer(proposer as any),
+      fcl.authorizations([proposer] as any),
+      fcl.limit(9999),
+    ])
+    .then(fcl.decode);
+  await fcl.tx(txId as string).onceSealed();
+  return txId as string;
+}
+
+export async function txEnsureFlowTreasuries(input: {
+  vaultId?: string | null;
+}): Promise<string> {
+  setAccessNode();
+  const code = getCadence(
+    "transactions/treasury/admin/ensure_flow_treasuries.cdc"
+  );
+  const { proposer } = getLocalAuthTriplet(
+    ENV.FRACTIONAL_PLATFORM_ADMIN_ADDRESS,
+    ENV.FRACTIONAL_PLATFORM_ADMIN_KEY,
+    0
+  );
+  const rawSuffix2 = input.vaultId ? toSafePathIdentifier(input.vaultId) : null;
+  const suffix = rawSuffix2 && rawSuffix2.length > 0 ? rawSuffix2 : "P_id";
+
+  const txId = await fcl
+    .send([
+      fcl.transaction(code),
+      fcl.args([fcl.arg(suffix ?? null, t.Optional(t.String))]),
       fcl.proposer(proposer as any),
       fcl.payer(proposer as any),
       fcl.authorizations([proposer] as any),
@@ -92,9 +105,8 @@ export async function txEnsureVaultReady(input: {
 }): Promise<{ flowTreasuryTxId: string; shareTreasuryTxId: string }> {
   const { vaultId, shareTokenIdent, shareTokenAddress } = input;
 
-  // Ensure per‑vault share treasuries
-  const shareTreasuryTxId = await txEnsureTreasuriesDynamic({
-    tokenIdent: shareTokenIdent,
+  // Ensure per‑vault share treasuries (strict alias)
+  const shareTreasuryTxId = await txEnsureShareTreasuries({
     vaultId,
     contractName: shareTokenIdent,
     contractAddress: shareTokenAddress,
@@ -115,12 +127,8 @@ export async function txEnsureVaultReady(input: {
     );
   }
 
-  // Ensure per‑vault FLOW treasuries (FLOW doesn't need contract metadata for aliasing)
-  const flowTreasuryTxId = await txEnsureTreasuriesDynamic({
-    tokenIdent: "FLOW",
-    vaultId,
-    // FLOW transactions use a placeholder contract address since VaultShareToken isn't used
-  });
+  // Ensure per‑vault FLOW treasuries
+  const flowTreasuryTxId = await txEnsureFlowTreasuries({ vaultId });
 
   return { flowTreasuryTxId, shareTreasuryTxId };
 }

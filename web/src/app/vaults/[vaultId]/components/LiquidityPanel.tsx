@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { Input } from "@/components/ui/input";
+import NumericInput from "@/components/form/NumericInput";
 import { Button } from "@/components/ui/button";
 import TxActionButton from "@/app/components/TxActionButton";
 import {
@@ -24,6 +25,8 @@ import { getVaultMaxSupply, getVaultTotalSupply } from "@/lib/api/vault";
 import MintSharesCard from "./MintSharesCard";
 import NotLoggedIn from "@/components/ui/NotLoggedIn";
 import type { FclClient, FclArgFn, FclType } from "@/lib/types/fcl";
+import { useTransactionStatusModal } from "@/app/TransactionStatusContext";
+import { useTreasuryReady } from "@/hooks/useTreasuryReady";
 
 export default function LiquidityPanel({
   vaultId,
@@ -42,6 +45,7 @@ export default function LiquidityPanel({
   const fcl = useFlowClient() as unknown as FclClient;
   const { user } = useFlowCurrentUser();
   const addrs = useFlowAddresses();
+  const { showTransaction } = useTransactionStatusModal();
 
   const userAuth = useMemo(() => fcl.currentUser().authorization, [fcl]);
   const [shareIn, setShareIn] = useState<string>("");
@@ -60,6 +64,8 @@ export default function LiquidityPanel({
   const [zapMinLpOut, setZapMinLpOut] = useState<string>("0.0");
   const [zapCadence, setZapCadence] = useState<string | null>(null);
   const custody = useVaultCustodyStatus(vaultId, fcl);
+  const { ready: treasuryReady, setReady: setTreasuryReady } =
+    useTreasuryReady(vaultId);
 
   // Local reserves override after successful tx (live refresh)
   const [reservesOverride, setReservesOverride] = useState<{
@@ -311,6 +317,8 @@ export default function LiquidityPanel({
         limit: 9999,
       });
 
+      // Show in modal and track sealing
+      showTransaction(txId as string);
       // Wait for transaction to be sealed via websocket
       await waitForTransactionSealed(fcl, txId);
 
@@ -388,23 +396,26 @@ export default function LiquidityPanel({
               Seed liquidity
             </div>
             <div className="flex flex-wrap gap-2 items-center text-xs">
-              <Input
+              <NumericInput
                 placeholder="Share amount"
                 value={seedShareAmount}
-                onChange={(e) => setSeedShareAmount(e.target.value)}
+                onValueChange={setSeedShareAmount}
                 className="w-32"
+                decimals={8}
               />
-              <Input
+              <NumericInput
                 placeholder="FLOW amount"
                 value={seedFlowAmount}
-                onChange={(e) => setSeedFlowAmount(e.target.value)}
+                onValueChange={setSeedFlowAmount}
                 className="w-32"
+                decimals={8}
               />
-              <Input
+              <NumericInput
                 placeholder="Min LP"
                 value={seedMinLpOut}
-                onChange={(e) => setSeedMinLpOut(e.target.value)}
+                onValueChange={setSeedMinLpOut}
                 className="w-28"
+                decimals={8}
               />
               <Button
                 type="button"
@@ -449,22 +460,24 @@ export default function LiquidityPanel({
             <div className="text-[11px] text-gray-500 mb-1">
               FLOW amount (zap)
             </div>
-            <Input
+            <NumericInput
               id="zap-flow"
               placeholder="e.g. 1.0"
               value={zapFlowIn}
-              onChange={(e) => setZapFlowIn(e.target.value)}
+              onValueChange={setZapFlowIn}
+              decimals={8}
             />
           </div>
           <div className="min-w-[10rem]">
             <div className="text-[11px] text-gray-500 mb-1">
               Min LP (slippage)
             </div>
-            <Input
+            <NumericInput
               id="zap-minlp"
               placeholder="e.g. 0.00000000"
               value={zapMinLpOut}
-              onChange={(e) => setZapMinLpOut(e.target.value)}
+              onValueChange={setZapMinLpOut}
+              decimals={8}
             />
             <div className="text-[11px] text-gray-500 mt-1">
               If minted LP is below this, the transaction reverts.
@@ -484,6 +497,19 @@ export default function LiquidityPanel({
                 custody.loading ||
                 !custody.alive
               }
+              beforeExecute={async () => {
+                if (treasuryReady) return;
+                const API =
+                  process.env.NEXT_PUBLIC_API_BASE || "http://localhost:4000";
+                await fetch(`${API}/pools/ensure-ready`, {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({ vaultId }),
+                }).then(async (r) => {
+                  if (!r.ok) throw new Error(await r.text());
+                  setTreasuryReady(true);
+                });
+              }}
               transaction={{
                 cadence: zapCadence as unknown as string,
                 args: ((arg: FclArgFn, t: FclType) => {
@@ -592,14 +618,12 @@ export default function LiquidityPanel({
             <div className="text-[11px] text-gray-500 mb-1 font-medium">
               Share amount (deposit)
             </div>
-            <Input
+            <NumericInput
               id="add-share"
               placeholder="e.g. 1.0"
               value={shareIn}
-              onChange={(e) => {
-                const v = e.target.value;
+              onValueChange={(v) => {
                 setShareIn(v);
-                // Auto-compute flow side when pool has reserves
                 const xs = Number(v);
                 if (reserveShare > 0 && reserveFlow > 0 && xs > 0) {
                   const yf = new Decimal(xs).mul(reserveFlow).div(reserveShare);
@@ -607,6 +631,7 @@ export default function LiquidityPanel({
                 }
               }}
               className="w-full"
+              decimals={8}
             />
             {suggestedFlowForShare != null ? (
               <div className="text-[11px] text-gray-500 mt-1">
@@ -618,12 +643,11 @@ export default function LiquidityPanel({
             <div className="text-[11px] text-gray-500 mb-1 font-medium">
               FLOW amount (deposit)
             </div>
-            <Input
+            <NumericInput
               id="add-flow"
               placeholder="e.g. 1.0"
               value={flowIn}
-              onChange={(e) => {
-                const v = e.target.value;
+              onValueChange={(v) => {
                 setFlowIn(v);
                 const yf = Number(v);
                 if (reserveShare > 0 && reserveFlow > 0 && yf > 0) {
@@ -634,6 +658,7 @@ export default function LiquidityPanel({
                 }
               }}
               className="w-full"
+              decimals={8}
             />
             {suggestedShareForFlow != null ? (
               <div className="text-[11px] text-gray-500 mt-1">
@@ -645,12 +670,13 @@ export default function LiquidityPanel({
             <div className="text-[11px] text-gray-500 mb-1 font-medium">
               Min LP (slippage guard)
             </div>
-            <Input
+            <NumericInput
               id="add-minlp"
               placeholder="e.g. 0.00000001"
               value={minLpOut}
-              onChange={(e) => setMinLpOut(e.target.value)}
+              onValueChange={setMinLpOut}
               className="w-full"
+              decimals={8}
             />
             <div className="text-[11px] text-gray-500 mt-1">
               If minted LP is below this, the transaction reverts.
@@ -674,6 +700,19 @@ export default function LiquidityPanel({
                 custody.loading ||
                 !custody.alive
               }
+              beforeExecute={async () => {
+                if (treasuryReady) return;
+                const API =
+                  process.env.NEXT_PUBLIC_API_BASE || "http://localhost:4000";
+                await fetch(`${API}/pools/ensure-ready`, {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({ vaultId }),
+                }).then(async (r) => {
+                  if (!r.ok) throw new Error(await r.text());
+                  setTreasuryReady(true);
+                });
+              }}
               transaction={{
                 cadence: addSimpleCadence as unknown as string,
                 args: ((arg: FclArgFn, t: FclType) => {
@@ -744,12 +783,11 @@ export default function LiquidityPanel({
             <div className="text-[11px] text-gray-500 mb-1 font-medium">
               LP amount to remove
             </div>
-            <Input
+            <NumericInput
               id="remove-lp"
               placeholder="e.g. 0.1"
               value={lpAmount}
-              onChange={(e) => {
-                const v = e.target.value;
+              onValueChange={(v) => {
                 setLpAmount(v);
                 // Auto-calculate expected outputs and set reasonable minimums
                 const lpNum = Number(v || 0);
@@ -768,6 +806,7 @@ export default function LiquidityPanel({
                 }
               }}
               className="w-full"
+              decimals={8}
             />
             {Number(walletLP) > 0 && (
               <div className="text-[11px] text-gray-500 mt-1">
@@ -871,6 +910,15 @@ export default function LiquidityPanel({
                 custody.loading ||
                 !custody.alive
               }
+              beforeExecute={async () => {
+                await fetch("/pools/ensure-ready", {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({ vaultId }),
+                }).then(async (r) => {
+                  if (!r.ok) throw new Error(await r.text());
+                });
+              }}
               transaction={{
                 cadence: removeCadence as unknown as string,
                 args: ((arg: FclArgFn, t: FclType) => {

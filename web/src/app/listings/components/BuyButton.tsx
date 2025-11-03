@@ -10,6 +10,7 @@ import { formatUFix64 } from "@/lib/num";
 import { useVaultCustodyStatus } from "@/hooks/useVaultCustodyStatus";
 import NotLoggedIn from "@/components/ui/NotLoggedIn";
 import type { FclArgFn, FclType } from "@/lib/types/fcl";
+import { useTreasuryReady } from "@/hooks/useTreasuryReady";
 
 export default function BuyButton({
   vaultId,
@@ -30,6 +31,8 @@ export default function BuyButton({
   const fcl = useFlowClient();
   const addrs = useFlowAddresses();
   const custody = useVaultCustodyStatus(vaultId, fcl);
+  const { ready: treasuryReady, setReady: setTreasuryReady } =
+    useTreasuryReady(vaultId);
 
   const [cadence, setCadence] = useState<string>("");
   const [pending, setPending] = useState(false);
@@ -59,6 +62,18 @@ export default function BuyButton({
       label={pending ? "Buying…" : "Buy"}
       variant="secondary"
       disabled={disabled || pending}
+      beforeExecute={async () => {
+        if (treasuryReady) return;
+        const API = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:4000";
+        await fetch(`${API}/pools/ensure-ready`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ vaultId }),
+        }).then(async (r) => {
+          if (!r.ok) throw new Error(await r.text());
+          setTreasuryReady(true);
+        });
+      }}
       transaction={
         {
           cadence,

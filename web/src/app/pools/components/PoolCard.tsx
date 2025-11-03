@@ -19,6 +19,8 @@ import { useVaultCustodyStatus } from "@/hooks/useVaultCustodyStatus";
 import { ensureVaultTreasury } from "@/lib/api/pools";
 import { getWalletBalancesScriptAliased } from "@/lib/tx/scripts";
 import NotLoggedIn from "@/components/ui/NotLoggedIn";
+import { useTreasuryReady } from "@/hooks/useTreasuryReady";
+import NumericInput from "@/components/form/NumericInput";
 
 export type PoolCardProps = {
   vaultId: string;
@@ -65,7 +67,9 @@ export default function PoolCard(props: { data: PoolCardProps }) {
   const custody = useVaultCustodyStatus(data.vaultId, fcl);
 
   // Platform treasury readiness for fee routing
-  const [treasuryReady, setTreasuryReady] = useState(false);
+  const { ready: treasuryReady, setReady: setTreasuryReady } = useTreasuryReady(
+    data.vaultId
+  );
   const [treasuryErr, setTreasuryErr] = useState<string | null>(null);
 
   // Live quote via API (debounced, stale-safe)
@@ -162,28 +166,7 @@ export default function PoolCard(props: { data: PoolCardProps }) {
     };
   }, [data.vaultId]);
 
-  // Ensure treasuries once custody is alive and admin present
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        setTreasuryErr(null);
-        setTreasuryReady(false);
-        if (!addrs.platformAdmin) return;
-        if (custody.loading || !custody.alive) return;
-        await ensureVaultTreasury(data.vaultId);
-        if (!cancelled) setTreasuryReady(true);
-      } catch (e) {
-        if (!cancelled) {
-          setTreasuryReady(false);
-          setTreasuryErr((e as Error).message);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [data.vaultId, custody.loading, custody.alive, addrs.platformAdmin]); // Use addrs.platformAdmin directly
+  // JIT ensure readiness happens right before actions; no proactive ensure on load
 
   // Resolve the correct pool owner by verifying the published capability.
   useEffect(() => {
@@ -300,6 +283,10 @@ export default function PoolCard(props: { data: PoolCardProps }) {
   const [walletShare, setWalletShare] = useState<string>("0.0");
   const [walletFlow, setWalletFlow] = useState<string>("0.0");
   const [vaultSymbol, setVaultSymbol] = useState<string | null>(null);
+  const [tokenIdent, setTokenIdent] = useState<string | null>(null);
+  const [vaultStorageSuffix, setVaultStorageSuffix] = useState<string | null>(
+    null
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -307,6 +294,31 @@ export default function PoolCard(props: { data: PoolCardProps }) {
       try {
         const v = await getVault(data.vaultId);
         if (!cancelled) setVaultSymbol(v?.shareSymbol ?? null);
+        // Fetch tokenIdent (contract name) for per‑vault FT
+        try {
+          const API =
+            process.env.NEXT_PUBLIC_API_BASE || "http://localhost:4000";
+          const r = await fetch(`${API}/vaults/${data.vaultId}/ft`, {
+            cache: "no-store",
+          });
+          if (r.ok) {
+            const d = await r.json();
+            const ident = String(d?.meta?.contractName || d?.ft?.name || "");
+            const suffix = String(d?.storageSuffix || "");
+            if (!cancelled) {
+              setTokenIdent(ident);
+              setVaultStorageSuffix(suffix || null);
+            }
+          } else if (!cancelled) {
+            setTokenIdent(null);
+            setVaultStorageSuffix(null);
+          }
+        } catch {
+          if (!cancelled) {
+            setTokenIdent(null);
+            setVaultStorageSuffix(null);
+          }
+        }
       } catch {
         // ignore
       }
@@ -485,13 +497,13 @@ export default function PoolCard(props: { data: PoolCardProps }) {
               >
                 You pay ({fromSide === "QUOTE" ? quoteSymbol : baseSymbol})
               </label>
-              <input
+              <NumericInput
                 id={`pay-${data.poolId}`}
-                inputMode="decimal"
-                className="w-full rounded border border-neutral-800 bg-neutral-900 p-2 text-xs text-neutral-100 placeholder:text-neutral-500"
+                className="w-full"
                 placeholder="0.00"
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                onValueChange={setAmount}
+                decimals={8}
               />
             </div>
             <div>
@@ -529,12 +541,11 @@ export default function PoolCard(props: { data: PoolCardProps }) {
                       {p}%
                     </button>
                   ))}
-                  <input
-                    inputMode="decimal"
-                    className="w-16 rounded border border-neutral-800 bg-neutral-900 p-1 text-[11px] text-neutral-100 placeholder:text-neutral-500"
+                  <NumericInput
+                    className="w-16"
                     value={slippagePct}
-                    onChange={(e) => setSlippagePct(e.target.value)}
-                    title="Custom slippage percentage"
+                    onValueChange={setSlippagePct}
+                    decimals={2}
                   />
                 </div>
                 <div className="flex items-center gap-2">
@@ -594,8 +605,22 @@ export default function PoolCard(props: { data: PoolCardProps }) {
                   !quoteOut ||
                   quoteLoading ||
                   quoteKey.length === 0 ||
-                  !treasuryReady
+                  !tokenIdent ||
+                  !vaultStorageSuffix
                 }
+                beforeExecute={async () => {
+                  if (treasuryReady) return;
+                  const API =
+                    process.env.NEXT_PUBLIC_API_BASE || "http://localhost:4000";
+                  await fetch(`${API}/pools/ensure-ready`, {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ vaultId: data.vaultId }),
+                  }).then(async (r) => {
+                    if (!r.ok) throw new Error(await r.text());
+                    setTreasuryReady(true);
+                  });
+                }}
                 transaction={
                   {
                     cadence: swapCadence as unknown as string,
@@ -625,6 +650,9 @@ export default function PoolCard(props: { data: PoolCardProps }) {
                         useID: true,
                         vaultId: data.vaultId,
                         platformAdmin: platformAdmin as string,
+                        tokenIdent: (tokenIdent as string) || "",
+                        vaultStorageSuffix:
+                          (vaultStorageSuffix as string) || "",
                       })(arg, t),
                     limit: 9999,
                   } as unknown as never

@@ -15,8 +15,10 @@ transaction(
   amountIn: UFix64,
   slippageBps: UInt64,
   useID: Bool,
-  vaultId: String,  // NEW: needed for fee routing
-  platformAdmin: Address
+  vaultId: String,  // needed for fee routing
+  platformAdmin: Address,
+  tokenIdent: String,
+  vaultStorageSuffix: String
 ) {
   prepare(signer: auth(Storage, BorrowValue, IssueStorageCapabilityController, SaveValue, UnpublishCapability, PublishCapability) &Account) {
     // Liveness guard: require LockBox custody is alive
@@ -79,14 +81,14 @@ transaction(
       let fee: @{FungibleToken.Vault} <- result.remove(key: "fee")!
       destroy result
       
-      // Route AMM fee via FeeRouter using per‑vault share token ident
+      // Route AMM fee via FeeRouter using explicit per‑vault share token ident
       if fee.balance > 0.0 {
-        let shareIdent: String = VaultShareToken.name
         FeeRouter.routeAmmFeeFromVault(
           vaultId: vaultId,
-          tokenIdent: shareIdent,
+          tokenIdent: tokenIdent,
           fee: <-fee,
-          adminAddr: platformAdmin
+          adminAddr: platformAdmin,
+          vaultStorageSuffix: vaultStorageSuffix
         )
       } else {
         destroy fee
@@ -157,7 +159,8 @@ transaction(
           vaultId: vaultId,
           tokenIdent: "FLOW",
           fee: <-fee,
-          adminAddr: platformAdmin
+          adminAddr: platformAdmin,
+          vaultStorageSuffix: vaultStorageSuffix
         )
       } else {
         destroy fee

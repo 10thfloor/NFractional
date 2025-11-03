@@ -18,7 +18,6 @@ PORT = "3000"
 NEXT_PUBLIC_FLOW_NETWORK = "testnet"
 NEXT_PUBLIC_ACCESS_NODE = "https://rest-testnet.onflow.org"
 NEXT_PUBLIC_DISCOVERY_WALLET = "https://fcl-discovery.onflow.org/testnet/authn"
-NEXT_PUBLIC_NETWORK = "testnet"
 NEXT_PUBLIC_API_URL = "https://flow-gql-api.fly.dev/graphql"
 NEXT_PUBLIC_API_BASE = "https://flow-gql-api.fly.dev"
 

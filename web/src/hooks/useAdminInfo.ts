@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { makeAdminAuth, type FlowAuthorizationFn } from "@/lib/flow";
 import { fetchAdminInfo } from "@/lib/api/listings";
+import { useFlowClient } from "@onflow/react-sdk";
 
 export function useAdminInfo(): {
   adminInfo: { addr: string; keyId: number } | null;
@@ -13,6 +14,8 @@ export function useAdminInfo(): {
     addr: string;
     keyId: number;
   } | null>(null);
+
+  const fcl = useFlowClient();
 
   useEffect(() => {
     let cancelled = false;
@@ -26,8 +29,8 @@ export function useAdminInfo(): {
   }, []);
 
   const adminAuth: FlowAuthorizationFn | null = useMemo(() => {
-    return adminInfo ? makeAdminAuth(adminInfo) : null;
-  }, [adminInfo]);
+    return adminInfo ? makeAdminAuth({ ...adminInfo, fcl }) : null;
+  }, [adminInfo, fcl]);
 
   return {
     adminInfo,

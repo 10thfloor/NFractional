@@ -1,6 +1,7 @@
-// Remote admin authorization using backend signer
+// Remote admin authorization using backend signer via wallet challenge flow
 // - Fetches addr/keyId from /flow/admin-info
-// - Posts signable to /flow/admin-sign to get signature
+// - Issues challenge (/api/auth/admin/challenge), wallet signs challenge
+// - Proxies to backend via /api/admin/sign which forwards to /flow/admin-sign
 export type FlowAuthorizationFn = (
   account: unknown
 ) => Promise<unknown> | unknown;
@@ -55,14 +56,53 @@ export function makeAdminAuth(admin: {
       // Setting sequenceNum to null tells FCL to fetch the latest account info
       sequenceNum: null,
       signingFunction: async (signable: unknown) => {
-        // Note: Backend authentication is optional - backend only requires auth
-        // if FLOW_ADMIN_SIGN_SECRET is explicitly set via environment variable.
-        // In local development, if not set, the endpoint works without auth.
-        // Secrets cannot be stored in NEXT_PUBLIC_ variables as they're exposed to the browser.
-        const res = await fetch(`${API}/flow/admin-sign`, {
+        // Secure wallet challenge → response → server co-sign flow
+        const toHex = (s: string): string => {
+          const enc = new TextEncoder();
+          const bytes = enc.encode(s);
+          let hex = "";
+          for (let i = 0; i < bytes.length; i++) {
+            const h = bytes[i].toString(16).padStart(2, "0");
+            hex += h;
+          }
+          return hex;
+        };
+
+        // 1) Request challenge (sets HttpOnly single-use nonce cookie)
+        const chRes = await fetch("/api/auth/admin/challenge", {
+          method: "GET",
+          cache: "no-store",
+        });
+        if (!chRes.ok) {
+          throw new Error(`Challenge error: ${await chRes.text()}`);
+        }
+        const { challenge } = (await chRes.json()) as { challenge: string };
+
+        // 2) Sign challenge with connected wallet (hex message)
+        type CurrentUserClient = {
+          snapshot: () => Promise<{ addr?: string }>;
+          signUserMessage: (msgHex: string) => Promise<unknown>;
+        };
+        const fclAny = admin.fcl as unknown as
+          | {
+              currentUser: () => CurrentUserClient;
+            }
+          | undefined;
+        if (!fclAny)
+          throw new Error("FCL client unavailable for wallet signing");
+        const currentUserClient = fclAny.currentUser();
+        const user = await currentUserClient.snapshot();
+        if (!user?.addr) throw new Error("Wallet not connected");
+
+        const hexChallenge = toHex(challenge);
+        const sigResult = await currentUserClient.signUserMessage(hexChallenge);
+        const signatures = Array.isArray(sigResult) ? sigResult : [sigResult];
+
+        // 3) Proxy to server to verify wallet proof and forward to backend for admin co-sign
+        const res = await fetch("/api/admin/sign", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ signable }),
+          body: JSON.stringify({ signable, challenge, signatures }),
         });
         if (!res.ok) {
           const errorText = await res.text();
@@ -82,7 +122,6 @@ export function makeAdminAuth(admin: {
             signature: payload.signature,
           };
         }
-        // If backend returned a raw string signature
         if (typeof payload === "string") {
           return {
             f_type: "CompositeSignature",

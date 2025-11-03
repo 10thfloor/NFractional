@@ -10,6 +10,8 @@ export function buildSwapArgs(input: {
   useID: boolean;
   vaultId: string;
   platformAdmin: string;
+  tokenIdent: string;
+  vaultStorageSuffix: string;
 }) {
   const owner = input.owner?.startsWith("0x")
     ? input.owner
@@ -27,7 +29,13 @@ export function buildSwapArgs(input: {
     : `0x${input.platformAdmin}`;
 
   return (arg: FclArgFn, t: FclType) => {
-    const types = t as { Address: unknown; String: unknown; UFix64: unknown; UInt64: unknown; Bool: unknown };
+    const types = t as {
+      Address: unknown;
+      String: unknown;
+      UFix64: unknown;
+      UInt64: unknown;
+      Bool: unknown;
+    };
     return [
       arg(owner, types.Address),
       arg(identifier, types.String),
@@ -37,6 +45,8 @@ export function buildSwapArgs(input: {
       arg(Boolean(input.useID), types.Bool),
       arg(input.vaultId, types.String),
       arg(platformAdmin, types.Address),
+      arg(input.tokenIdent, types.String),
+      arg(input.vaultStorageSuffix, types.String),
     ];
   };
 }

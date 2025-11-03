@@ -30,4 +30,36 @@ export async function gqlFetch<T>(
   return json.data;
 }
 
-export const DEFAULT_NETWORK = process.env.NEXT_PUBLIC_NETWORK || "emulator";
+export const DEFAULT_NETWORK = process.env.NEXT_PUBLIC_FLOW_NETWORK || "emulator";
+
+export async function qSymbolAvailable(
+  network: string,
+  symbol: string
+): Promise<boolean> {
+  const query = `
+    query SymbolAvailable($network: String!, $symbol: String!) {
+      symbolAvailable(network: $network, symbol: $symbol) { available }
+    }
+  `;
+  const data = await gqlFetch<{ symbolAvailable: { available: boolean } }>(
+    query,
+    { network, symbol }
+  );
+  return Boolean(data.symbolAvailable?.available);
+}
+
+export async function qVaultIdAvailable(
+  network: string,
+  vaultId: string
+): Promise<boolean> {
+  const query = `
+    query VaultIdAvailable($network: String!, $vaultId: String!) {
+      vaultIdAvailable(network: $network, vaultId: $vaultId) { available }
+    }
+  `;
+  const data = await gqlFetch<{ vaultIdAvailable: { available: boolean } }>(
+    query,
+    { network, vaultId }
+  );
+  return Boolean(data.vaultIdAvailable?.available);
+}

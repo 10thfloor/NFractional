@@ -26,6 +26,30 @@ export async function scriptExampleNFTGetIDs(
   return (resp as number[]).map((n) => String(n));
 }
 
+// Check if a vaultId exists on-chain via Fractional.getVault
+export async function scriptVaultIdExists(vaultId: string): Promise<boolean> {
+  setAccessNode();
+  const code = getCadence("scripts/GetVault.cdc");
+  const resp = await fcl.query({
+    cadence: code,
+    args: (arg: any, t: any) => [arg(vaultId, t.String)],
+  });
+  return resp != null;
+}
+
+// Resolve vaultId by share symbol; returns null if not found
+export async function scriptVaultIdBySymbol(
+  symbol: string
+): Promise<string | null> {
+  setAccessNode();
+  const code = getCadence("scripts/GetVaultIdBySymbol.cdc");
+  const resp = await fcl.query({
+    cadence: code,
+    args: (arg: any, t: any) => [arg(symbol, t.String)],
+  });
+  return (resp as string | null) ?? null;
+}
+
 // Enumerate public NFT collections on an account by scanning public paths
 // and checking for NonFungibleToken.CollectionPublic conformance.
 // Also resolves the actual storage path by matching type IDs.

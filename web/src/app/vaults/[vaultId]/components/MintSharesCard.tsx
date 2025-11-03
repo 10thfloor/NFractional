@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
+import NumericInput from "@/components/form/NumericInput";
 import { Button } from "@/components/ui/button";
 import { mintSharesToTreasury } from "@/lib/api/shares";
 
@@ -125,20 +126,15 @@ export default function MintSharesCard({
           Mint shares
         </div>
         <div className="flex flex-wrap gap-2 items-center text-xs">
-          <Input
+          <NumericInput
             placeholder="Amount (eg 100.00)"
             value={amount}
-            onChange={(e) => {
-              const value = e.target.value;
-              // Allow empty, numbers, and decimal points
-              if (value === "" || /^[0-9]*\.?[0-9]*$/.test(value)) {
-                setAmount(value);
-                setError(null);
-              }
+            onValueChange={(v) => {
+              setAmount(v);
+              setError(null);
             }}
             className="w-48"
-            type="text"
-            inputMode="decimal"
+            decimals={8}
           />
           <Button
             type="button"

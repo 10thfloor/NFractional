@@ -6,7 +6,9 @@ import { z } from "zod";
 import { getSigningFunction } from "./lib/flowAuth";
 import cors from "@fastify/cors";
 import ENV, { validateProductionEnv } from "./lib/env";
+import * as fcl from "@onflow/fcl";
 import with0x from "./lib/addr";
+import { toSafePathIdentifier } from "./lib/ident";
 
 import { txConfigureShareSupply, scriptShareBalance } from "./tx/shares";
 
@@ -214,8 +216,24 @@ async function buildServer() {
         }
       }
 
-      const body = (req.body || {}) as { signable?: unknown };
-      const schema = z.object({ signable: z.unknown() });
+      const body = (req.body || {}) as {
+        signable?: unknown;
+        challenge?: string;
+        signatures?: Array<{ addr: string; keyId: number; signature: string }>;
+      };
+      const schema = z.object({
+        signable: z.unknown(),
+        challenge: z.string().optional(),
+        signatures: z
+          .array(
+            z.object({
+              addr: z.string(),
+              keyId: z.number(),
+              signature: z.string(),
+            })
+          )
+          .optional(),
+      });
       const parsed = schema.parse(body);
       type FlowSignable = { auth?: { keyId?: number } } & Record<
         string,
@@ -223,6 +241,34 @@ async function buildServer() {
       >;
       const signable: FlowSignable =
         (parsed.signable as FlowSignable) ?? ({} as FlowSignable);
+
+      // Wallet proof (challenge + signatures) verification (required in production)
+      if (ENV.NODE_ENV === "production") {
+        if (!parsed.challenge || !parsed.signatures) {
+          reply.code(401);
+          return { error: "wallet proof required" };
+        }
+        try {
+          const hexMsg = Buffer.from(parsed.challenge, "utf8").toString("hex");
+          const ok = await (
+            fcl.AppUtils as unknown as {
+              verifyUserSignatures: (
+                msgHex: string,
+                sigs: Array<{ addr: string; keyId: number; signature: string }>
+              ) => Promise<boolean>;
+            }
+          ).verifyUserSignatures(hexMsg, parsed.signatures);
+          if (!ok) {
+            reply.code(401);
+            return { error: "invalid wallet signature" };
+          }
+        } catch (e) {
+          reply.code(400);
+          return {
+            error: `wallet verification failed: ${(e as Error).message}`,
+          };
+        }
+      }
 
       // Basic guardrails: ensure we're signing our known transactions only
       // 1) Check network
@@ -291,7 +337,7 @@ async function buildServer() {
   });
 
   // Public info for admin auth (address/keyId) so client auth object matches server signature
-  app.get("/flow/admin-info", async (_req, _reply) => {
+  app.get("/flow/admin-info", async (_req, reply) => {
     const addr = with0x(ENV.FRACTIONAL_PLATFORM_ADMIN_ADDRESS);
 
     if (!addr) {
@@ -299,11 +345,19 @@ async function buildServer() {
     }
 
     const keyId = 0;
+    reply.header(
+      "Cache-Control",
+      "public, max-age=86400, s-maxage=86400, immutable"
+    );
     return { addr, keyId };
   });
 
   // Standard addresses endpoint for clients
-  app.get("/flow/addresses", async (_req, _reply) => {
+  app.get("/flow/addresses", async (_req, reply) => {
+    reply.header(
+      "Cache-Control",
+      "public, max-age=86400, s-maxage=86400, immutable"
+    );
     return {
       ft: with0x(ENV.FLOW_CONTRACT_FUNGIBLETOKEN),
       flow: with0x(ENV.FLOW_CONTRACT_FLOWTOKEN),
@@ -496,7 +550,136 @@ async function buildServer() {
         md: with0x(ENV.FLOW_CONTRACT_METADATA_VIEWS),
         fractional: with0x(ENV.FLOW_CONTRACT_FRACTIONAL),
       };
-      return { ft, addrs, meta: { ...meta, contractName: ftName } };
+      const storageSuffix = toSafePathIdentifier(vaultId);
+      return {
+        ft,
+        addrs,
+        meta: { ...meta, contractName: ftName },
+        storageSuffix,
+      };
+    } catch (e) {
+      reply.code(400);
+      return { error: (e as Error).message };
+    }
+  });
+
+  // Ensure treasuries for pools are ready (idempotent JIT guard)
+  app.post("/pools/ensure-ready", async (req, reply) => {
+    try {
+      const body = (req.body || {}) as { vaultId?: string };
+      const vaultId = String(body.vaultId || "");
+      if (!vaultId) {
+        reply.code(400);
+        return { error: "vaultId required" };
+      }
+
+      // Fetch FT registry for the vault to obtain contract name/address
+      const fcl = await import("@onflow/fcl");
+      const accessUrl = ENV.FLOW_ACCESS.startsWith("http")
+        ? ENV.FLOW_ACCESS
+        : `http://${ENV.FLOW_ACCESS}`;
+      fcl.config().put("accessNode.api", accessUrl);
+      const code = `
+        import Fractional from ${with0x(ENV.FLOW_CONTRACT_FRACTIONAL)}
+        access(all) fun main(vaultId: String): {String: String}? {
+          return Fractional.getVaultFT(vaultId: vaultId)
+        }
+      `;
+      const ft = (await fcl.query({
+        cadence: code,
+        args: (arg: any, t: any) => [arg(vaultId, t.String)],
+      })) as { address?: string; name?: string } | null;
+      if (!ft || !ft.address || !ft.name) {
+        reply.code(400);
+        return { error: "missing vault FT metadata" };
+      }
+
+      const { txEnsureVaultReady } = await import("./tx/treasury");
+      const { flowTreasuryTxId, shareTreasuryTxId } = await txEnsureVaultReady({
+        vaultId,
+        shareTokenIdent: String(ft.name),
+        shareTokenAddress: with0x(String(ft.address)),
+      });
+      return { flowTreasuryTxId, shareTreasuryTxId };
+    } catch (e) {
+      reply.code(400);
+      return { error: (e as Error).message };
+    }
+  });
+
+  // Lightweight readiness check for treasuries (no writes)
+  app.get("/pools/treasury-status", async (req, reply) => {
+    try {
+      const query = (req.query || {}) as {
+        vaultId?: string;
+        shareIdent?: string;
+      };
+      const vaultId = String(query.vaultId || "");
+      let shareIdent = (query.shareIdent || "").toString();
+      if (!vaultId) {
+        reply.code(400);
+        return { error: "vaultId required" };
+      }
+
+      // Resolve shareIdent from registry if not provided
+      if (!shareIdent) {
+        const fcl = await import("@onflow/fcl");
+        const accessUrl = ENV.FLOW_ACCESS.startsWith("http")
+          ? ENV.FLOW_ACCESS
+          : `http://${ENV.FLOW_ACCESS}`;
+        fcl.config().put("accessNode.api", accessUrl);
+        const code = `
+          import Fractional from ${with0x(ENV.FLOW_CONTRACT_FRACTIONAL)}
+          access(all) view fun main(vaultId: String): {String: String}? {
+            return Fractional.getVaultFT(vaultId: vaultId)
+          }
+        `;
+        const ft = (await fcl.query({
+          cadence: code,
+          args: (arg: any, t: any) => [arg(vaultId, t.String)],
+        })) as { address?: string; name?: string } | null;
+        if (ft?.name) shareIdent = String(ft.name);
+      }
+
+      const fcl = await import("@onflow/fcl");
+      const accessUrl = ENV.FLOW_ACCESS.startsWith("http")
+        ? ENV.FLOW_ACCESS
+        : `http://${ENV.FLOW_ACCESS}`;
+      fcl.config().put("accessNode.api", accessUrl);
+      const adminAddr = with0x(ENV.FRACTIONAL_PLATFORM_ADMIN_ADDRESS);
+
+      const script = `
+        import FungibleToken from ${with0x(ENV.FLOW_CONTRACT_FUNGIBLETOKEN)}
+        access(all) view fun main(admin: Address, shareIdent: String, suffix: String): {String: Bool} {
+          let out: {String: Bool} = {}
+          let acct = getAccount(admin)
+          let pf: PublicPath = PublicPath(identifier: "PlatformTreasury_FLOW")!
+          let ps: PublicPath = PublicPath(identifier: "PlatformTreasury_".concat(shareIdent))!
+          let vf: PublicPath = PublicPath(identifier: "VaultTreasury_FLOW_".concat(suffix))!
+          let vs: PublicPath = PublicPath(identifier: "VaultTreasury_".concat(shareIdent).concat("_").concat(suffix))!
+          out["platform_flow"] = acct.capabilities.get<&{FungibleToken.Vault}>(pf).borrow() != nil
+          out["platform_share"] = acct.capabilities.get<&{FungibleToken.Vault}>(ps).borrow() != nil
+          out["vault_flow"] = acct.capabilities.get<&{FungibleToken.Vault}>(vf).borrow() != nil
+          out["vault_share"] = acct.capabilities.get<&{FungibleToken.Vault}>(vs).borrow() != nil
+          return out
+        }
+      `;
+      const suffix = toSafePathIdentifier(vaultId);
+      const res = (await fcl.query({
+        cadence: script,
+        args: (arg: any, t: any) => [
+          arg(adminAddr, t.Address),
+          arg(shareIdent || "", t.String),
+          arg(suffix, t.String),
+        ],
+      })) as Record<string, boolean>;
+      return {
+        platformFlow: Boolean(res?.platform_flow),
+        platformShare: Boolean(res?.platform_share),
+        vaultFlow: Boolean(res?.vault_flow),
+        vaultShare: Boolean(res?.vault_share),
+        shareIdent: shareIdent || null,
+      };
     } catch (e) {
       reply.code(400);
       return { error: (e as Error).message };
@@ -583,15 +766,21 @@ async function buildServer() {
         contractName: ft.name,
         symbol,
       });
-      // Ensure treasuries for this token/vault are published
-      const { txEnsureTreasuriesDynamic } = await import("./tx/treasury");
-      const treasuryTxId = await txEnsureTreasuriesDynamic({
-        tokenIdent: ft.name,
+      // Ensure treasuries for this token/vault are published (split share/flow)
+      const { txEnsureVaultReady } = await import("./tx/treasury");
+      const { shareTreasuryTxId, flowTreasuryTxId } = await txEnsureVaultReady({
         vaultId,
-        contractName: ft.name, // tokenIdent IS the contract name
-        contractAddress: ft.address, // Required for aliasing VaultShareToken import
+        shareTokenIdent: ft.name,
+        shareTokenAddress: with0x(ft.address),
       });
-      return { deployTxId, registerTxId, adminInitTxId, treasuryTxId, ft };
+      return {
+        deployTxId,
+        registerTxId,
+        adminInitTxId,
+        treasuryTxId: shareTreasuryTxId,
+        flowTreasuryTxId,
+        ft,
+      };
     } catch (e) {
       reply.code(400);
       return { error: (e as Error).message };

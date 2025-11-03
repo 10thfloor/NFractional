@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
+import NumericInput from "@/components/form/NumericInput";
 import {
   Select,
   SelectContent,
@@ -18,6 +19,7 @@ import { swapViaActionsTxAliased } from "@/lib/tx/amm";
 import { Decimal, formatUFix64 } from "@/lib/num";
 import { getWalletBalancesScriptAliased } from "@/lib/tx/scripts";
 import { useVaultCustodyStatus } from "@/hooks/useVaultCustodyStatus";
+import { useTreasuryReady } from "@/hooks/useTreasuryReady";
 import NotLoggedIn from "@/components/ui/NotLoggedIn";
 import type { FclClient, FclArgFn, FclType } from "@/lib/types/fcl";
 
@@ -47,6 +49,12 @@ export default function SwapPanel({
   const [slippagePct, setSlippagePct] = useState<string>("1.0");
   const poolCapPath = `/public/AMM_Pool_${poolId}`;
   const [swapCadence, setSwapCadence] = useState<string | null>(null);
+  const [tokenIdent, setTokenIdent] = useState<string | null>(null);
+  const [vaultStorageSuffix, setVaultStorageSuffix] = useState<string | null>(
+    null
+  );
+  const { ready: treasuryReady, setReady: setTreasuryReady } =
+    useTreasuryReady(vaultId);
 
   // Custody status gate
   const custody = useVaultCustodyStatus(vaultId, fcl);
@@ -66,6 +74,35 @@ export default function SwapPanel({
         if (!cancelled) setSwapCadence(c);
       } catch {
         if (!cancelled) setSwapCadence(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [vaultId]);
+
+  // Fetch per-vault FT contract name (tokenIdent) once
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const API = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:4000";
+        const r = await fetch(`${API}/vaults/${vaultId}/ft`, {
+          cache: "no-store",
+        });
+        if (!r.ok) throw new Error(await r.text());
+        const d = await r.json();
+        const ident = String(d?.meta?.contractName || d?.ft?.name || "");
+        const suffix = String(d?.storageSuffix || "");
+        if (!cancelled) {
+          setTokenIdent(ident);
+          setVaultStorageSuffix(suffix || null);
+        }
+      } catch {
+        if (!cancelled) {
+          setTokenIdent(null);
+          setVaultStorageSuffix(null);
+        }
       }
     })();
     return () => {
@@ -222,29 +259,27 @@ export default function SwapPanel({
             <SelectItem value="share_to_flow">{vaultSymbol} → FLOW</SelectItem>
           </SelectContent>
         </Select>
-        <Input
-          type="text"
-          inputMode="decimal"
+        <NumericInput
           placeholder="Amount in"
           value={amountIn}
-          onChange={(e) => setAmountIn(e.target.value)}
+          onValueChange={setAmountIn}
+          decimals={8}
           className="w-32"
+          required
         />
-        <Input
-          type="text"
-          inputMode="decimal"
+        <NumericInput
           placeholder="Min out"
           value={minOut}
-          onChange={(e) => setMinOut(e.target.value)}
+          onValueChange={setMinOut}
+          decimals={8}
           className="w-32"
         />
         <div className="flex items-center gap-1">
-          <Input
-            type="text"
-            inputMode="decimal"
+          <NumericInput
             placeholder="Slippage %"
             value={slippagePct}
-            onChange={(e) => setSlippagePct(e.target.value)}
+            onValueChange={setSlippagePct}
+            decimals={2}
             className="w-20"
           />
           <button
@@ -280,8 +315,23 @@ export default function SwapPanel({
             !swapCadence ||
             !quoteOut ||
             quoteLoading ||
-            quoteKey.length === 0
+            quoteKey.length === 0 ||
+            !tokenIdent ||
+            !vaultStorageSuffix
           }
+          beforeExecute={async () => {
+            if (treasuryReady) return;
+            const API =
+              process.env.NEXT_PUBLIC_API_BASE || "http://localhost:4000";
+            await fetch(`${API}/pools/ensure-ready`, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ vaultId }),
+            }).then(async (r) => {
+              if (!r.ok) throw new Error(await r.text());
+              setTreasuryReady(true);
+            });
+          }}
           transaction={{
             cadence: swapCadence as unknown as string,
             args: ((arg: FclArgFn, t: FclType) =>
@@ -294,6 +344,8 @@ export default function SwapPanel({
                 useID: true,
                 vaultId,
                 platformAdmin: platformAdmin as string,
+                tokenIdent: tokenIdent as string,
+                vaultStorageSuffix: vaultStorageSuffix as string,
               })(arg, t)) as never,
             limit: 9999,
           }}

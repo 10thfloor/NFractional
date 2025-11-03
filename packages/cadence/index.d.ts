@@ -14,6 +14,8 @@ export const transactions_vault_admin_schedule_fee_params: string;
 export const transactions_vault_admin_set_max_supply: string;
 export const transactions_vault_admin_set_ft: string;
 export const transactions_treasury_admin_ensure_caps: string;
+export const transactions_treasury_admin_ensure_flow_treasuries: string;
+export const transactions_treasury_admin_ensure_share_treasuries: string;
 export const transactions_treasury_admin_ensure_treasuries_dynamic: string;
 export const transactions_shares_user_setup: string;
 export const transactions_shares_user_setup_dynamic: string;

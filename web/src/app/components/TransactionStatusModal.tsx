@@ -33,8 +33,8 @@ const STATUS_LABELS = {
 
 function getExplorerUrl(txId: string, network: string): string {
   const baseUrls: Record<string, string> = {
-    testnet: "https://testnet.flowscan.org/tx",
-    mainnet: "https://flowscan.org/tx",
+    testnet: "https://testnet.flowscan.io/tx",
+    mainnet: "https://flowscan.io/tx",
     emulator: "#", // No explorer for emulator
   };
   return `${baseUrls[network] || baseUrls.testnet}/${txId}`;

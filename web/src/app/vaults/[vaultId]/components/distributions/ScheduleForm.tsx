@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
 import NotLoggedIn from "@/components/ui/NotLoggedIn";
 import { getVaultTreasuryShareBalance } from "@/lib/api/home";
+import NumericInput from "@/components/form/NumericInput";
 
 type ScheduleFormState = {
   programId: string;
@@ -278,14 +279,12 @@ export default function ScheduleForm({
           <label className="block text-[11px] text-gray-500 font-medium">
             Total Amount
           </label>
-          <input
-            type="text"
+          <NumericInput
             value={form.totalAmount}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, totalAmount: e.target.value }))
-            }
-            className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:outline-none focus:ring-2 focus:ring-neutral-600"
-            placeholder="1000.0"
+            onValueChange={(v) => setForm((f) => ({ ...f, totalAmount: v }))}
+            className="w-full"
+            placeholder="1000.00"
+            decimals={8}
             required
           />
           <p className="mt-1 text-[11px] text-gray-500">

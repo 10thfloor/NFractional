@@ -51,10 +51,12 @@ export async function createVaultAndMintDualTxConfig(
     process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/graphql"
   ).replace(/\/graphql$/, "");
 
-  const ftContractName = `VaultShareToken_${input.shareSymbol.replace(
+  // Build concrete per-series FT contract name consistent with server sanitization
+  const baseName = `VaultShareToken_${input.shareSymbol.replace(
     /[^A-Za-z0-9_]/g,
     "_"
   )}`;
+  const ftContractName = baseName.replace(/^[0-9]/, (m) => `C_${m}`);
 
   // Ensure the concrete FT contract is deployed (idempotent) and wait for completion
   const deployResp = await fetch(`${API_BASE}/contracts/series-ft-deploy`, {

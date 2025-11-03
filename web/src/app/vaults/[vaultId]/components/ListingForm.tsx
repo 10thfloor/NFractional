@@ -2,6 +2,7 @@
 
 import { useFlowClient } from "@onflow/react-sdk";
 import { Input } from "@/components/ui/input";
+import NumericInput from "@/components/form/NumericInput";
 import TxActionButton from "@/app/components/TxActionButton";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
@@ -244,15 +245,13 @@ export default function ListingForm({
             <div className="text-[11px] text-gray-500 mb-1 font-medium">
               Price Amount
             </div>
-            <Input
+            <NumericInput
               name="priceAmount"
-              placeholder="1.0"
-              inputMode="decimal"
+              placeholder="1.00"
               className="w-full"
               value={form.priceAmount}
-              onChange={(e) =>
-                setForm({ ...form, priceAmount: e.target.value })
-              }
+              onValueChange={(v) => setForm({ ...form, priceAmount: v })}
+              decimals={2}
             />
           </div>
         </div>
@@ -261,13 +260,13 @@ export default function ListingForm({
           <div className="text-[11px] text-gray-500 mb-1 font-medium">
             Amount
           </div>
-          <Input
+          <NumericInput
             name="amount"
             placeholder="10.0"
-            inputMode="decimal"
             className="w-full"
             value={form.amount}
-            onChange={(e) => setForm({ ...form, amount: e.target.value })}
+            onValueChange={(v) => setForm({ ...form, amount: v })}
+            decimals={8}
           />
           <div className="text-[11px] text-gray-500 mt-1">
             Number of {vaultSymbol} shares to sell.

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useFlowClient, useFlowCurrentUser } from "@onflow/react-sdk";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import NumericInput from "@/components/form/NumericInput";
 import { guessBrandByTypeId } from "@/lib/nftBrands";
 import {
   getNftCollections,
@@ -17,6 +18,12 @@ import type { FlowAuthorizationFn } from "@/lib/flow";
 import { createVaultAndMintDualTxConfig } from "@/lib/tx/vaults";
 import { waitForTransactionSealed } from "@/lib/tx/utils";
 import NotLoggedIn from "@/components/ui/NotLoggedIn";
+import { useTransactionStatusModal } from "@/app/TransactionStatusContext";
+import {
+  DEFAULT_NETWORK,
+  qSymbolAvailable,
+  qVaultIdAvailable,
+} from "@/lib/graphql";
 
 type PublicCol = NftCollectionPublic;
 
@@ -29,6 +36,8 @@ export default function DepositWizardPage() {
   const [tokenId, setTokenId] = useState<string>("");
   const [vaultId, setVaultId] = useState<string>("");
   const [shareSymbol, setShareSymbol] = useState<string>("");
+  const [vaultIdOk, setVaultIdOk] = useState<boolean | null>(null);
+  const [symbolOk, setSymbolOk] = useState<boolean | null>(null);
   const [policy, setPolicy] = useState<string>("standard");
   const [status, setStatus] = useState<string>("");
   const [error, setError] = useState<string>("");
@@ -45,9 +54,44 @@ export default function DepositWizardPage() {
     const s = p.get("symbol");
     const pol = p.get("policy");
     if (v) setVaultId(v);
-    if (s) setShareSymbol(s);
+    if (s) setShareSymbol(s.toUpperCase());
     if (pol) setPolicy(pol);
   }, []);
+  // Debounced availability checks for vaultId and symbol
+  useEffect(() => {
+    const id = setTimeout(async () => {
+      const valid = /^[A-Za-z0-9_-]{3,32}$/.test(vaultId);
+      if (!valid) {
+        setVaultIdOk(null);
+        return;
+      }
+      try {
+        const ok = await qVaultIdAvailable(DEFAULT_NETWORK, vaultId);
+        setVaultIdOk(ok);
+      } catch {
+        setVaultIdOk(null);
+      }
+    }, 300);
+    return () => clearTimeout(id);
+  }, [vaultId]);
+
+  useEffect(() => {
+    const id = setTimeout(async () => {
+      const sym = (shareSymbol || "").toUpperCase();
+      const valid = /^[A-Z0-9_]{3,16}$/.test(sym);
+      if (!valid) {
+        setSymbolOk(null);
+        return;
+      }
+      try {
+        const ok = await qSymbolAvailable(DEFAULT_NETWORK, sym);
+        setSymbolOk(ok);
+      } catch {
+        setSymbolOk(null);
+      }
+    }, 300);
+    return () => clearTimeout(id);
+  }, [shareSymbol]);
 
   const [preview, setPreview] = useState<{
     name?: string;
@@ -93,6 +137,7 @@ export default function DepositWizardPage() {
     mutate: (cfg: Record<string, unknown>) => Promise<string>;
   };
   const f = fcl as unknown as FclLike;
+  const { showTransaction } = useTransactionStatusModal();
 
   useEffect(() => {
     (async () => {
@@ -381,9 +426,27 @@ export default function DepositWizardPage() {
                 className="border border-neutral-800 bg-neutral-950 rounded p-2 w-full text-sm text-neutral-100 placeholder:text-neutral-500"
                 placeholder="VAULT001"
                 value={vaultId}
-                onChange={(e) => setVaultId(e.target.value)}
+                onChange={(e) => {
+                  const raw = e.target.value || "";
+                  const cleaned = raw.replace(/[^A-Za-z0-9_-]/g, "");
+                  setVaultId(cleaned);
+                }}
                 disabled={!isNftSelected}
               />
+              <div className="text-xs mt-1 min-h-[1rem]">
+                {vaultId && vaultIdOk === false ? (
+                  <span className="text-red-400">
+                    Vault ID is already taken
+                  </span>
+                ) : vaultId && vaultIdOk === true ? (
+                  <span className="text-green-400">Vault ID is available</span>
+                ) : (
+                  <span className="text-neutral-500">
+                    Use 3-32 chars: letters, numbers, &quot;-&quot; or
+                    &quot;_&quot;
+                  </span>
+                )}
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="flex flex-col">
@@ -405,9 +468,27 @@ export default function DepositWizardPage() {
                   className="border border-neutral-800 bg-neutral-950 rounded p-2 w-full text-sm text-neutral-100 placeholder:text-neutral-500"
                   placeholder="V001"
                   value={shareSymbol}
-                  onChange={(e) => setShareSymbol(e.target.value)}
+                  onChange={(e) => {
+                    const raw = e.target.value || "";
+                    const upper = raw.toUpperCase();
+                    const cleaned = upper.replace(/[^A-Z0-9_]/g, "");
+                    setShareSymbol(cleaned);
+                  }}
                   disabled={!isNftSelected}
                 />
+                <div className="text-xs mt-1 min-h-[1rem]">
+                  {shareSymbol && symbolOk === false ? (
+                    <span className="text-red-400">
+                      Symbol is already taken
+                    </span>
+                  ) : shareSymbol && symbolOk === true ? (
+                    <span className="text-green-400">Symbol is available</span>
+                  ) : (
+                    <span className="text-neutral-500">
+                      Use 3-16 chars: A-Z, 0-9, &quot;_&quot;
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="flex flex-col">
                 <label
@@ -420,8 +501,8 @@ export default function DepositWizardPage() {
                   </span>
                 </label>
                 <div className="text-xs text-neutral-500 mb-2">
-                  Controls how shares can be bought back or traded. &quot;standard&quot;
-                  allows flexible transfers.
+                  Controls how shares can be bought back or traded.
+                  &quot;standard&quot; allows flexible transfers.
                 </div>
                 <input
                   readOnly={true}
@@ -478,8 +559,8 @@ export default function DepositWizardPage() {
             </div>
             <p className="text-xs text-neutral-400">
               Transform your NFT into tradeable fractions. Set how many
-              fractions you&apos;ll create, claim your initial ownership stake, and
-              determine the value per fraction. This is where you unlock
+              fractions you&apos;ll create, claim your initial ownership stake,
+              and determine the value per fraction. This is where you unlock
               liquidity and let others invest in your NFT.
             </p>
 
@@ -499,13 +580,13 @@ export default function DepositWizardPage() {
                   number = larger share value. Larger number = smaller pieces,
                   more accessibility for buyers.
                 </div>
-                <input
+                <NumericInput
                   id="maxSupplyInput"
-                  inputMode="numeric"
                   className="border border-neutral-800 bg-neutral-950 rounded p-2 w-full text-sm text-neutral-100 placeholder:text-neutral-500"
                   placeholder="e.g. 1,000,000"
                   value={maxSupply}
-                  onChange={(e) => setMaxSupply(e.target.value)}
+                  onValueChange={setMaxSupply}
+                  decimals={8}
                   disabled={!isNftSelected}
                 />
               </div>
@@ -546,13 +627,13 @@ export default function DepositWizardPage() {
                     stake)
                   </label>
                 </div>
-                <input
+                <NumericInput
                   id="initialMintInput"
-                  inputMode="numeric"
                   className="border border-neutral-800 bg-neutral-950 rounded p-2 w-full text-sm text-neutral-100 placeholder:text-neutral-500"
                   placeholder="e.g. 100,000"
                   value={initialMint}
-                  onChange={(e) => setInitialMint(e.target.value)}
+                  onValueChange={setInitialMint}
+                  decimals={8}
                   disabled={!isNftSelected || !customStake}
                 />
               </div>
@@ -572,13 +653,13 @@ export default function DepositWizardPage() {
                   anchors investor interest and helps you discover the true
                   market value of your NFT.
                 </div>
-                <input
+                <NumericInput
                   id="indicativePriceInput"
-                  inputMode="decimal"
                   className="border border-neutral-800 bg-neutral-950 rounded p-2 w-full text-sm text-neutral-100 placeholder:text-neutral-500"
                   placeholder="e.g. 0.25"
                   value={indicativePrice}
-                  onChange={(e) => setIndicativePrice(e.target.value)}
+                  onValueChange={setIndicativePrice}
+                  decimals={2}
                   disabled={!isNftSelected}
                 />
               </div>
@@ -731,7 +812,9 @@ export default function DepositWizardPage() {
                     !publicId ||
                     !tokenId ||
                     !vaultId ||
-                    !adminReady
+                    !adminReady ||
+                    symbolOk !== true ||
+                    vaultIdOk !== true
                   }
                   onClick={async () => {
                     if (!user?.addr) return;
@@ -778,6 +861,8 @@ export default function DepositWizardPage() {
                         txCfg as unknown as Record<string, unknown>
                       );
 
+                      // Show modal and track sealing via websocket
+                      showTransaction(txId);
                       await waitForTransactionSealed(fcl, txId);
 
                       setStatus(`Vault created and shares minted: ${txId}`);

@@ -1,5 +1,5 @@
 import { files as cadenceFiles } from "@flow-hackathon/cadence";
-import { waitForTransactionSealed } from "./utils";
+import { waitForTransactionExecuted, waitForTransactionSealed } from "./utils";
 
 export const publishCustodyCapTx =
   cadenceFiles["transactions/custody/user/PublishCustodyCap.cdc"];
@@ -12,7 +12,8 @@ export async function depositToCustody(
     tokenId: string; // UInt64
     vaultId: string;
     creatorAuth: (acct: unknown) => Promise<unknown> | unknown;
-  }
+  },
+  opts?: { onSubmitted?: (txId: string) => void; waitMode?: "sealed" | "executed"; timeoutMs?: number }
 ): Promise<string> {
   const cadence = cadenceFiles["transactions/custody/user/deposit.cdc"];
   const txId = await fcl
@@ -34,8 +35,17 @@ export async function depositToCustody(
       );
     });
   
-  // Wait for transaction to be sealed via websocket
-  await waitForTransactionSealed(fcl, txId as string);
+  // Notify UI for modal display
+  try {
+    opts?.onSubmitted?.(txId as string);
+  } catch {}
+
+  // Wait for transaction completion via websocket
+  if ((opts?.waitMode ?? "sealed") === "executed") {
+    await waitForTransactionExecuted(fcl, txId as string, opts?.timeoutMs ?? 60_000);
+  } else {
+    await waitForTransactionSealed(fcl, txId as string, opts?.timeoutMs ?? 60_000);
+  }
   
   return txId as string;
 }

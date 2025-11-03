@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
+import NumericInput from "@/components/form/NumericInput";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -127,11 +128,12 @@ export default function Step3Page() {
           <label htmlFor="tokenId" className="block text-sm mb-1">
             Token ID
           </label>
-          <Input
+          <NumericInput
             id="tokenId"
             className="w-full"
             value={tokenId}
-            onChange={(e) => setTokenId(e.target.value)}
+            onValueChange={setTokenId}
+            decimals={0}
             placeholder="UInt64"
           />
         </div>

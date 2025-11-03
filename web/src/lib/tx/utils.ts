@@ -277,26 +277,67 @@ function subscribeToTransactionStatus(
 
   ws.onmessage = (event) => {
     try {
-      const data = JSON.parse(event.data) as WebSocketMessage;
+      type TxWsEnvelope = {
+        subscription_id?: string;
+        subscriptionId?: string;
+        sub_id?: string;
+        payload?: Record<string, unknown>;
+        data?: Record<string, unknown>;
+        result?: Record<string, unknown>;
+        id?: string;
+        tx_id?: string;
+        status?: string;
+        transaction_status?: string;
+        error?: { code?: unknown; message?: unknown } | null;
+      };
+      const env = JSON.parse(event.data) as TxWsEnvelope;
 
-      // Handle errors
-      if (data.error) {
+      const subId = env.subscription_id ?? env.subscriptionId ?? env.sub_id;
+
+      const payload = env.payload || env.data || env.result || {};
+
+      const id =
+        (typeof (payload as { id?: unknown }).id === "string"
+          ? (payload as { id?: string }).id
+          : undefined) ||
+        env.id ||
+        env.tx_id;
+
+      const statusRaw =
+        (typeof (payload as { status?: unknown }).status === "string"
+          ? (payload as { status?: string }).status
+          : undefined) ||
+        env.status ||
+        env.transaction_status;
+
+      // Flow sometimes sends an error envelope
+      const errObj = env.error;
+      if (errObj && typeof errObj === "object") {
+        const code = (errObj as { code?: unknown }).code;
+        const message = (errObj as { message?: unknown }).message;
         cleanup();
         callbacks.onError?.(
           new Error(
-            `WebSocket error: ${data.error.code} - ${data.error.message}`
+            `WebSocket error: ${String(code ?? "?")} - ${String(
+              message ?? "unknown"
+            )}`
           )
         );
         return;
       }
 
-      // Handle transaction status updates
-      if (
-        data.subscription_id === subscriptionId &&
-        data.topic === "transaction_statuses" &&
-        data.payload
-      ) {
-        const status = data.payload.status;
+      // Only accept updates for our subscription if provided
+      if (subId && subId !== subscriptionId) {
+        return;
+      }
+
+      // Only accept updates for our txId
+      if (id && id.toLowerCase() !== txId.toLowerCase()) {
+        return;
+      }
+
+      if (statusRaw) {
+        const status = String(statusRaw).toUpperCase() as TransactionStatus;
         callbacks.onData?.(status);
       }
     } catch (e) {
@@ -462,7 +503,7 @@ export function useTransactionStatus(
     setStatus(null);
     setError(null);
 
-    // Use polling for emulator, WebSocket for testnet/mainnet
+    // Use polling for emulator; for testnet/mainnet, run websocket and polling in parallel
     if (isEmulator()) {
       cleanupRef.current = pollTransactionStatus(
         fcl,
@@ -479,7 +520,10 @@ export function useTransactionStatus(
         60000 // 60 second timeout
       );
     } else {
-      cleanupRef.current = subscribeToTransactionStatus(txId, {
+      const cleanupFns: Array<() => void> = [];
+
+      // WebSocket subscription (primary)
+      const wsCleanup = subscribeToTransactionStatus(txId, {
         onData: (newStatus) => {
           setStatus(newStatus);
         },
@@ -487,6 +531,33 @@ export function useTransactionStatus(
           setError(err);
         },
       });
+      cleanupFns.push(wsCleanup);
+
+      // REST polling (fallback/secondary) to ensure updates in case websocket is flaky
+      const pollCleanup = pollTransactionStatus(
+        fcl,
+        txId,
+        {
+          onData: (newStatus) => {
+            setStatus(newStatus);
+          },
+          onError: (err) => {
+            // Only surface if we don't have a status yet
+            setError((prev) => prev ?? err);
+          },
+        },
+        1000,
+        60000
+      );
+      cleanupFns.push(pollCleanup);
+
+      cleanupRef.current = () => {
+        for (const fn of cleanupFns) {
+          try {
+            fn();
+          } catch {}
+        }
+      };
     }
 
     return () => {

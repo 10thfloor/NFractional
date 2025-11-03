@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import NumericInput from "@/components/form/NumericInput";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { DEFAULT_NETWORK, gqlFetch } from "@/lib/graphql";
 import { useFeeParams } from "@/hooks/useFeeQuotes";
@@ -465,14 +466,13 @@ export default function ListingFeesPanel({
                 Total Fee (bps)
               </label>
               <div className="flex items-center gap-3 flex-wrap">
-                <Input
+                <NumericInput
                   id="feeBps"
                   className="w-28 px-2 py-1"
                   placeholder="e.g. 100"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
                   value={form.feeBps}
-                  onChange={(e) => setFeeBpsSafe(e.target.value)}
+                  onValueChange={(v) => setFeeBpsSafe(v)}
+                  decimals={0}
                 />
                 <div className="flex gap-2 text-xs">
                   {[30, 50, 100].map((bps) => (
@@ -514,13 +514,12 @@ export default function ListingFeesPanel({
                   >
                     Vault split (bps)
                   </label>
-                  <Input
+                  <NumericInput
                     id="vaultSplitBps"
                     className="w-full px-2 py-1"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
                     value={form.vaultSplitBps}
-                    onChange={(e) => setVaultSplitAuto(e.target.value)}
+                    onValueChange={(v) => setVaultSplitAuto(v)}
+                    decimals={0}
                   />
                 </div>
                 <div className="grid gap-1">
@@ -530,13 +529,12 @@ export default function ListingFeesPanel({
                   >
                     Protocol split (bps)
                   </label>
-                  <Input
+                  <NumericInput
                     id="protocolSplitBps"
                     className="w-full px-2 py-1"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
                     value={form.protocolSplitBps}
-                    onChange={(e) => setProtocolSplitAuto(e.target.value)}
+                    onValueChange={(v) => setProtocolSplitAuto(v)}
+                    decimals={0}
                   />
                 </div>
               </div>
@@ -594,7 +592,7 @@ export default function ListingFeesPanel({
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap min-w-0">
               <Button
                 type="button"
                 variant="secondary"
@@ -652,7 +650,9 @@ export default function ListingFeesPanel({
                 {mutLoading ? "Saving…" : "Propose Fee Schedule"}
               </Button>
               {mutMsg && (
-                <span className="text-xs text-gray-600">{mutMsg}</span>
+                <span className="text-xs text-gray-600 break-all min-w-0">
+                  {mutMsg}
+                </span>
               )}
             </div>
 

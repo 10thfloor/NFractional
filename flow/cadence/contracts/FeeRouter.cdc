@@ -90,7 +90,8 @@ access(all) contract FeeRouter {
         vaultId: String,
         tokenIdent: String,
         fee: @{FungibleToken.Vault},
-        adminAddr: Address
+        adminAddr: Address,
+        vaultStorageSuffix: String
     ) {
         if fee.balance <= 0.0 { destroy fee; return }
 
@@ -105,7 +106,7 @@ access(all) contract FeeRouter {
         let platformPath: PublicPath = PublicPath(identifier: "PlatformTreasury_".concat(tokenIdent))!
         let platformRecv: Capability<&{FungibleToken.Vault}> = getAccount(adminAddr).capabilities.get<&{FungibleToken.Vault}>(platformPath)
 
-        let vtIdent: String = "VaultTreasury_".concat(tokenIdent).concat("_").concat(vaultId)
+        let vtIdent: String = "VaultTreasury_".concat(tokenIdent).concat("_").concat(vaultStorageSuffix)
         let vaultPath: PublicPath = PublicPath(identifier: vtIdent)!
         let vaultRecv: Capability<&{FungibleToken.Vault}> = getAccount(adminAddr).capabilities.get<&{FungibleToken.Vault}>(vaultPath)
 
