@@ -11,6 +11,8 @@
 
 "NFractional" is a production-ready NFT fractionalization platform built on Flow blockchain. It empowers creators to split their NFTs into fungible share tokens, enabling liquidity, governance, and innovative DeFi experiences—all powered by Flow's cutting-edge Actions (DeFi Primitives).
 
+Testnet: [0x237656746bc69765](https://testnet.flowscan.io/account/237656746bc69765)
+
 ---
 
 ## ✨ Features
